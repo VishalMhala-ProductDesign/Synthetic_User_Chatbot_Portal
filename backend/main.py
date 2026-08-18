@@ -29,7 +29,11 @@ app.add_middleware(
     CORSMiddleware,
     # frontend/vite.config.js dev server port — both host forms allowed since
     # browsers treat localhost and 127.0.0.1 as distinct origins.
-    allow_origins=["http://localhost:5190", "http://127.0.0.1:5190"],
+    allow_origins=[
+    "http://localhost:5190",
+    "http://127.0.0.1:5190",
+    "https://synthetic-user-chatbot-portal.vercel.app",
+],
     allow_credentials=True,
     allow_methods=["*"], allow_headers=["*"],
 )
