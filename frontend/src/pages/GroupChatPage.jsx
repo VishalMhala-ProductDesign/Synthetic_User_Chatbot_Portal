@@ -52,6 +52,26 @@ function resolveGroundedField(persona, label) {
   }
 }
 
+// Status legend shown inside each framework's Insight button - computed
+// entirely from get_group_session_insight_status's response (see
+// frameworkStatus), so it always agrees with whether the button is actually
+// clickable.
+function frameworkStatusLabel(status) {
+  if (status?.generated && status.verified) return "Insight Generated & Verified";
+  if (status?.generated) return "Insight Generated & Not Verified";
+  if (status?.unlocked) return "Ready to generate";
+  return "Not ready to generate";
+}
+
+// Color-codes the same status frameworkStatusLabel describes, for the dot
+// shown next to it.
+function frameworkStatusClass(status) {
+  if (status?.generated && status.verified) return "legend-verified";
+  if (status?.generated) return "legend-unverified";
+  if (status?.unlocked) return "legend-ready";
+  return "legend-locked";
+}
+
 export default function GroupChatPage() {
   const { groupId } = useParams();
   const { token } = useAuth();
@@ -76,6 +96,16 @@ export default function GroupChatPage() {
   // validated Empathy Mapping insight to exist, so this fetch should always
   // succeed by the time JTBD's drawer is showing.
   const [empathyMappingContent, setEmpathyMappingContent] = useState(null);
+  // Which framework cards are clickable for the active session - Empathy Mapping
+  // is always unlocked, every later one only once every earlier stage has been
+  // generated and researcher-verified (see get_group_session_insight_status in
+  // main.py, the same check generating one would actually enforce). Keyed by
+  // framework name; a missing entry is treated as locked.
+  const [frameworkStatus, setFrameworkStatus] = useState({});
+  // Guards refreshFrameworkStatus against a stale response landing after the
+  // researcher has already switched to a different chat.
+  const activeSessionIdRef = useRef(activeSessionId);
+  activeSessionIdRef.current = activeSessionId;
   const bottomRef = useRef(null);
 
   const personasById = Object.fromEntries(personas.map((p) => [p.id, p]));
@@ -109,6 +139,19 @@ export default function GroupChatPage() {
     setSessions(list);
     return list;
   }, [token, groupId]);
+
+  const refreshFrameworkStatus = useCallback(
+    (sessionId) => {
+      if (!sessionId) return;
+      api
+        .getGroupSessionInsightStatus(token, sessionId)
+        .then((status) => {
+          if (sessionId === activeSessionIdRef.current) setFrameworkStatus(status);
+        })
+        .catch(() => {});
+    },
+    [token]
+  );
 
   async function handleDeleteSession(session, e) {
     e.stopPropagation();
@@ -189,6 +232,10 @@ export default function GroupChatPage() {
       [cacheKey]: { ...(prev[cacheKey] || { content: insight.content, error: insight.error }), validatedRows },
     }));
     api.saveGroupSessionInsightValidatedRows(token, activeSessionId, insight.framework, validatedRows).catch(() => {});
+    // A checkbox toggle here is exactly what can unlock the next framework's
+    // card (or re-lock it, if the researcher unchecked something) - refresh
+    // right away rather than waiting for the researcher to switch chats.
+    refreshFrameworkStatus(activeSessionId);
   }
 
   async function handleSaveInsight({ content, validatedRows }) {
@@ -196,6 +243,7 @@ export default function GroupChatPage() {
     const cacheKey = `${activeSessionId}:${insight.framework}`;
     await api.saveGroupSessionInsight(token, activeSessionId, insight.framework, { content, validatedRows });
     setInsightCache((prev) => ({ ...prev, [cacheKey]: { content, error: null, validatedRows } }));
+    refreshFrameworkStatus(activeSessionId);
   }
 
   useEffect(() => {
@@ -218,6 +266,17 @@ export default function GroupChatPage() {
       .then(setMessages)
       .catch((err) => setError(err.message));
   }, [token, activeSessionId]);
+
+  useEffect(() => {
+    if (!activeSessionId) {
+      setFrameworkStatus({});
+      return;
+    }
+    // Empathy Mapping is always unlocked - seed it immediately rather than
+    // waiting on the round trip, so its card doesn't flash disabled for a beat.
+    setFrameworkStatus({ "Empathy Mapping": { unlocked: true, reason: null } });
+    refreshFrameworkStatus(activeSessionId);
+  }, [activeSessionId, refreshFrameworkStatus]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -397,22 +456,30 @@ export default function GroupChatPage() {
             </p>
             <div className="chat-analysis-body">
               {ANALYSIS_FRAMEWORKS.map((framework) => (
-                <div key={framework} className="framework-row">
-                  <button
-                    type="button"
-                    className={`framework-card${selectedFramework === framework ? " framework-card-active" : ""}`}
-                    onClick={() => handleFrameworkClick(framework)}
-                    disabled={!activeSession}
-                  >
-                    {framework}
-                  </button>
-                  <button
-                    type="button"
-                    className="objective-output-button"
-                    onClick={() => setObjectiveFramework(framework)}
-                  >
-                    Objective &amp; Output
-                  </button>
+                <div key={framework} className="framework-item">
+                  <div className="framework-row">
+                    <button
+                      type="button"
+                      className={`framework-card${selectedFramework === framework ? " framework-card-active" : ""}`}
+                      onClick={() => handleFrameworkClick(framework)}
+                      disabled={!activeSession || !frameworkStatus[framework]?.unlocked}
+                      title={frameworkStatus[framework]?.reason || undefined}
+                    >
+                      <span className="framework-card-label">{framework}</span>
+                      <span className={`framework-legend-badge ${frameworkStatusClass(frameworkStatus[framework])}`}>
+                        <span className="framework-legend-dot" />
+                        {frameworkStatusLabel(frameworkStatus[framework])}
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      className="objective-output-button"
+                      onClick={() => setObjectiveFramework(framework)}
+                      title="Objective & Output"
+                    >
+                      O&amp;O
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -426,7 +493,10 @@ export default function GroupChatPage() {
           loading={insight.loading}
           content={insight.content}
           error={insight.error}
-          onClose={() => setInsight(null)}
+          onClose={() => {
+            setInsight(null);
+            setSelectedFramework(null);
+          }}
           onRegenerate={handleRegenerateInsight}
           initialValidatedRows={insight.validatedRows}
           onValidatedRowsChange={handleValidatedRowsChange}

@@ -14,13 +14,13 @@ from database import get_db
 from models import (
     User, Persona, PersonaGroup, PersonaGroupMembership,
     ChatSession, Message, GroupChatSession, GroupMessage, MaturityRecommendation,
-    FrameworkObjective, SessionInsight, GroupSessionInsight,
+    SessionInsight, GroupSessionInsight,
 )
 from auth import hash_password, verify_password, create_token, decode_token
 from maturity_tools import tools as maturity_tools
 from prompts import (
     build_persona_system_prompt, split_reply_and_grounding, build_insight_prompt,
-    DEFAULT_OBJECTIVES, DEFAULT_HELPS_TO_IDENTIFY, DEFAULT_OUTPUT_FORMATS, DEFAULT_EXAMPLES,
+    load_scope_reference, prior_framework, FRAMEWORK_CHAIN,
 )
 
 app = FastAPI()
@@ -30,8 +30,8 @@ app.add_middleware(
     # frontend/vite.config.js dev server port — both host forms allowed since
     # browsers treat localhost and 127.0.0.1 as distinct origins.
     allow_origins=[
-    "http://localhost:5190",
-    "http://127.0.0.1:5190",
+    "http://localhost:5191",
+    "http://127.0.0.1:5191",
     "https://synthetic-user-chatbot-portal.vercel.app",
 ],
     allow_credentials=True,
@@ -479,68 +479,6 @@ def fetch_objective_doc_content() -> str:
         return None
 
 
-def _grid_to_markdown_table(grid: list) -> str:
-    rows = [row for row in grid if any((cell or "").strip() for cell in row)]
-    if not rows:
-        return None
-    col_count = max(len(row) for row in rows)
-    pad = lambda row: [(row[i] if i < len(row) else "") for i in range(col_count)]
-    lines = [
-        f"| {' | '.join(pad(rows[0])) } |",
-        f"| {' | '.join(['---'] * col_count)} |",
-        *(f"| {' | '.join(pad(row))} |" for row in rows[1:]),
-    ]
-    return "\n".join(lines)
-
-
-def _parse_styling(styling: str) -> tuple:
-    """The `styling` column holds a JSON object with the editable grids from the
-    "Objective & Output" overlay beyond the plain-text objective: {"outputFormat":
-    [[...]], "helpsToIdentify": [[...]], "example": [[...]]}. Older rows saved
-    before "Helps to identify"/"Example" existed hold either a bare grid array
-    (treated as outputFormat) or a dict missing some of the newer keys - both are
-    backfilled with the empty default for whatever's missing."""
-    if not styling:
-        return [], [], []
-    try:
-        data = json.loads(styling)
-    except (TypeError, ValueError):
-        return [], [], []
-    if isinstance(data, dict):
-        output_format = data.get("outputFormat")
-        helps_to_identify = data.get("helpsToIdentify")
-        example = data.get("example")
-        return (
-            output_format if isinstance(output_format, list) else [],
-            helps_to_identify if isinstance(helps_to_identify, list) else [],
-            example if isinstance(example, list) else [],
-        )
-    if isinstance(data, list):
-        return data, [], []
-    return [], [], []
-
-
-def _get_framework_objective(user_id: str, framework: str, db) -> tuple:
-    """Reads the Insight Panel's "Objective & Output" overlay for this specific
-    framework and splits it into the pieces generate_insight needs to keep
-    separate: what to study before writing the analysis (focus text and the
-    "Helps to identify" grid), versus the exact structure the finished analysis
-    must be poured into (the "Output" grid), versus a worked "Example" grid kept
-    only as a calibration reference."""
-    obj = db.query(FrameworkObjective).filter_by(researcher_id=user_id, framework=framework).first()
-    if not obj:
-        return None, None, None, None
-
-    focus = obj.objective.strip() if obj.objective and obj.objective.strip() else None
-    output_format, helps_to_identify, example = _parse_styling(obj.styling)
-    return (
-        focus,
-        _grid_to_markdown_table(helps_to_identify),
-        _grid_to_markdown_table(output_format),
-        _grid_to_markdown_table(example),
-    )
-
-
 # Belt-and-suspenders against the model tacking on a "Design Insight" (or similarly
 # named) section despite build_insight_prompt explicitly telling it not to -
 # smaller models don't always honor "output only the table" reliably. Strips any
@@ -565,15 +503,12 @@ def generate_insight(framework: str, transcript: str, persona_names: list,
     build_insight_prompt). Plain completion - no web-search tooling needed, it only
     reasons over the conversation/insight already gathered."""
     doc_content = fetch_objective_doc_content()
-    focus, helps_to_identify, output_format, example = (
-        _get_framework_objective(user_id, framework, db) if user_id and db is not None
-        else (None, None, None, None)
-    )
-    focus = "\n\n---\n\n".join(part for part in (doc_content, focus) if part) or None
+    scope_ref = load_scope_reference(framework) or {}
+    focus = "\n\n---\n\n".join(part for part in (doc_content, scope_ref.get("objective")) if part) or None
 
     messages = build_insight_prompt(framework, transcript, persona_names,
-                                     focus=focus, helps_to_identify=helps_to_identify, output_format=output_format,
-                                     example=example, transcript_label=transcript_label)
+                                     focus=focus, helps_to_identify=scope_ref.get("helps_to_identify"),
+                                     output_format=scope_ref.get("output_format"), transcript_label=transcript_label)
     response = create_completion(messages=messages, max_tokens=1800)
     content = _response_text(response)
     return _strip_design_insight(content)
@@ -682,98 +617,118 @@ def _row_validation_key(row: list) -> str:
     return " ".join(row)
 
 
-def _require_empathy_mapping_insight(model, session_id: str, db):
-    """Looks up this session's already-generated Empathy Mapping insight and
-    raises a clear 400 if it hasn't been generated yet, or if any of its rows
-    aren't yet marked "✓ Validated" by the researcher. JTBD Analysis's Input
-    (per the researcher's reference doc) is that insight, and only the
-    verified version of it - an unverified AI claim shouldn't get built on top
-    of for the next stage of analysis."""
-    not_generated_message = (
-        "JTBD Analysis is built from this chat's Empathy Mapping insight - "
-        "generate Empathy Mapping for this chat first."
-    )
-    record = db.query(model).filter_by(session_id=session_id, framework="Empathy Mapping").first()
-    if not record or not record.content:
-        raise HTTPException(400, not_generated_message)
+# Mirrors LEGACY_VERIFIED_KEYS/verifiedKey in InsightDrawer.jsx - the sentinel
+# row-key marking a whole generated table as researcher-verified, for every
+# framework except Empathy Mapping (which has its own per-row Validation
+# column instead - see _require_prior_insight below). JTBD Analysis and User
+# Journey Mapping keep their original literal keys for backward compatibility
+# with already-saved validated_rows; every later framework in the chain gets
+# a key derived from its own name.
+_LEGACY_VERIFIED_KEYS = {
+    "JTBD Analysis": "__jtbd_verified__",
+    "User Journey Mapping": "__ujm_verified__",
+}
 
+
+def _verified_key(framework: str) -> str:
+    return _LEGACY_VERIFIED_KEYS.get(framework) or f"__verified__{framework}__"
+
+
+def _insight_is_verified(model, session_id: str, db, framework: str) -> bool:
+    """True if `framework`'s insight for this session exists and has been fully
+    researcher-verified - every row individually checked for Empathy Mapping
+    (its own per-row Validation column - see _row_validation_key), or the
+    single "Verified <framework>" checkbox for every other framework in the
+    chain (see _verified_key)."""
+    record = db.query(model).filter_by(session_id=session_id, framework=framework).first()
+    if not record or not record.content:
+        return False
     _, rows = _parse_markdown_table(record.content)
     if not rows:
-        raise HTTPException(400, not_generated_message)
-
+        return False
     validated_keys = set(record.validated_rows or [])
-    if not all(_row_validation_key(row) in validated_keys for row in rows):
+    if framework == "Empathy Mapping":
+        return all(_row_validation_key(row) in validated_keys for row in rows)
+    return _verified_key(framework) in validated_keys
+
+
+def _missing_chain(model, session_id: str, db, framework: str) -> list:
+    """Walks backward from `framework` through the full chain (see
+    prior_framework in prompts.py) and returns every ancestor that hasn't been
+    generated yet or hasn't been fully verified, oldest first - so a researcher
+    who jumps straight to a late-chain framework (e.g. clicking System Mapping
+    on a brand-new chat) sees the whole remaining path at once, instead of a
+    single "generate Pain Point + Friction Analysis first" error that then
+    cascades into a new one-step-back error each time they follow it. Also
+    what the frontend's locked/unlocked framework-card buttons are driven by
+    (see get_session_insight_status)."""
+    missing = []
+    current = framework
+    while True:
+        prior = prior_framework(current)
+        if not prior:
+            break
+        if not _insight_is_verified(model, session_id, db, prior):
+            missing.append(prior)
+        current = prior
+    missing.reverse()
+    return missing
+
+
+def _require_prior_insight(model, session_id: str, db, framework: str):
+    """Looks up the framework immediately before `framework` in scope/00_overview.md's
+    chain (see prior_framework in prompts.py) and returns (content, transcript_label)
+    for generate_insight to use as input, raising a clear 400 - listing every
+    still-missing-or-unverified ancestor in the chain, not just the immediate one -
+    if the researcher hasn't completed the earlier stages yet. An unverified AI
+    claim shouldn't get built on top of for the next stage of analysis. Returns
+    (None, None) for Empathy Mapping, whose input is the raw chat transcript, not
+    a prior stage's output."""
+    prior = prior_framework(framework)
+    if not prior:
+        return None, None
+
+    missing = _missing_chain(model, session_id, db, framework)
+    if missing:
+        chain_str = " → ".join(missing)
+        stages = "stage" if len(missing) == 1 else "stages"
         raise HTTPException(
             400,
-            "JTBD Analysis can only be generated from fully verified Empathy Mapping "
-            "data - validate every row in Empathy Mapping for this chat first "
-            "(check \"I've reviewed the chat and manually validated this\" for each one).",
+            f"{framework} is built on a chain of earlier {stages} for this chat. "
+            f"Still missing or not yet verified: {chain_str}. Start with {missing[0]}.",
         )
-    return record.content
+
+    record = db.query(model).filter_by(session_id=session_id, framework=prior).first()
+    return record.content, f"{prior} insight"
 
 
-# Mirrors JTBD_VERIFIED_KEY in InsightDrawer.jsx - the single "Verified JTBD"
-# checkbox marks the whole generated table as researcher-verified (JTBD
-# Analysis has no per-row Validation column of its own to check off, since
-# it's already built from Empathy Mapping's verified rows).
-JTBD_VERIFIED_KEY = "__jtbd_verified__"
-
-
-def _require_jtbd_analysis_insight(model, session_id: str, db):
-    """Looks up this session's already-generated JTBD Analysis insight and
-    raises a clear 400 if it hasn't been generated yet, or if the researcher
-    hasn't checked "Verified JTBD" for it. User Journey Mapping's Input (per
-    the researcher's reference doc) is "Jobs + goals from JTBD Analysis" -
-    only the verified version of it, same principle as JTBD Analysis itself
-    only building on fully-validated Empathy Mapping."""
-    not_generated_message = (
-        "User Journey Mapping is built from this chat's JTBD Analysis - "
-        "generate JTBD Analysis for this chat first."
-    )
-    record = db.query(model).filter_by(session_id=session_id, framework="JTBD Analysis").first()
-    if not record or not record.content:
-        raise HTTPException(400, not_generated_message)
-
-    if JTBD_VERIFIED_KEY not in (record.validated_rows or []):
-        raise HTTPException(
-            400,
-            "User Journey Mapping can only be generated once JTBD Analysis has been "
-            "marked verified - check \"Verified JTBD\" in the JTBD Analysis overlay "
-            "for this chat first.",
-        )
-    return record.content
-
-
-# Mirrors UJM_VERIFIED_KEY in InsightDrawer.jsx - the single "Verified UJM"
-# checkbox marks the whole generated table as researcher-verified, same
-# principle as JTBD_VERIFIED_KEY above.
-UJM_VERIFIED_KEY = "__ujm_verified__"
-
-
-def _require_user_journey_mapping_insight(model, session_id: str, db):
-    """Looks up this session's already-generated User Journey Mapping insight
-    and raises a clear 400 if it hasn't been generated yet, or if the
-    researcher hasn't checked "Verified UJM" for it. Task Flow Analysis's
-    Input (per the researcher's reference doc) is "Journey stages and User
-    Goal, Activities / Actions, THINKS, FEELS, Pain Points / Friction, Key
-    Decision, Opportunity from User Journey Mapping" - only the verified
-    version of it, same principle as the earlier stages in the chain."""
-    not_generated_message = (
-        "Task Flow Analysis is built from this chat's User Journey Mapping - "
-        "generate User Journey Mapping for this chat first."
-    )
-    record = db.query(model).filter_by(session_id=session_id, framework="User Journey Mapping").first()
-    if not record or not record.content:
-        raise HTTPException(400, not_generated_message)
-
-    if UJM_VERIFIED_KEY not in (record.validated_rows or []):
-        raise HTTPException(
-            400,
-            "Task Flow Analysis can only be generated once User Journey Mapping has "
-            "been marked verified - check \"Verified UJM\" in the User Journey "
-            "Mapping overlay for this chat first.",
-        )
-    return record.content
+@app.get("/api/chat/sessions/{session_id}/insight-status")
+def get_session_insight_status(session_id: str, user_id: str = Depends(get_current_user), db=Depends(get_db)):
+    """For every framework in the chain (see FRAMEWORK_CHAIN in prompts.py), tells
+    the frontend whether that framework's card should be clickable yet - Empathy
+    Mapping always is, and every later one only once every earlier stage has been
+    generated and researcher-verified (mirrors _missing_chain, the same check
+    generating it would actually enforce, so a locked button never disagrees with
+    what clicking it would do). `reason` is the human-readable next step to show
+    as the button's tooltip when it's locked; null once unlocked. `generated`/
+    `verified` describe this framework's own insight (not its prerequisites) -
+    together with `unlocked` they're what the frontend's small-print status
+    legend (Insight Generated & Verified / & Not Verified / Ready to Generate /
+    Generate Previous Insight) is computed from."""
+    session = db.query(ChatSession).filter_by(id=session_id, researcher_id=user_id).first()
+    if not session:
+        raise HTTPException(404, "Session not found")
+    status = {}
+    for framework in FRAMEWORK_CHAIN:
+        missing = _missing_chain(SessionInsight, session_id, db, framework)
+        record = db.query(SessionInsight).filter_by(session_id=session_id, framework=framework).first()
+        status[framework] = {
+            "unlocked": not missing,
+            "reason": f"Generate and verify {missing[0]} first" if missing else None,
+            "generated": bool(record and record.content),
+            "verified": _insight_is_verified(SessionInsight, session_id, db, framework),
+        }
+    return status
 
 
 @app.post("/api/chat/sessions/{session_id}/insight")
@@ -786,18 +741,10 @@ def generate_session_insight(session_id: str, framework: str,
     persona = db.query(Persona).filter_by(id=session.persona_id).first()
     persona_name = persona.name if persona else "Persona"
 
-    if framework == "JTBD Analysis":
-        empathy_content = _require_empathy_mapping_insight(SessionInsight, session_id, db)
-        insight = generate_insight(framework, empathy_content, [persona_name], user_id, db,
-                                    transcript_label="Empathy Mapping insight")
-    elif framework == "User Journey Mapping":
-        jtbd_content = _require_jtbd_analysis_insight(SessionInsight, session_id, db)
-        insight = generate_insight(framework, jtbd_content, [persona_name], user_id, db,
-                                    transcript_label="JTBD Analysis insight")
-    elif framework == "Task Flow Analysis":
-        ujm_content = _require_user_journey_mapping_insight(SessionInsight, session_id, db)
-        insight = generate_insight(framework, ujm_content, [persona_name], user_id, db,
-                                    transcript_label="User Journey Mapping insight")
+    prior_content, prior_label = _require_prior_insight(SessionInsight, session_id, db, framework)
+    if prior_content is not None:
+        insight = generate_insight(framework, prior_content, [persona_name], user_id, db,
+                                    transcript_label=prior_label)
     else:
         messages = db.query(Message).filter_by(session_id=session_id).order_by(Message.created_at).all()
         if not messages:
@@ -951,110 +898,32 @@ def delete_group_session(session_id: str, user_id: str = Depends(get_current_use
 
 
 # ---------------------------------------------------------------------------
-# Framework Objective & Output — one (objective, helpsToIdentify grid,
-# outputFormat grid, example grid) bundle per (researcher, framework) pair,
-# folded into every insight generated for that specific framework (see
-# generate_insight above), across every persona and persona group the
-# researcher owns. Everything but the plain-text objective is JSON-encoded
-# together in the `styling` column. Saving replaces the existing bundle for
-# that framework only.
+# Framework Objective & Output — read-only view of the researcher's scope/*.md
+# reference doc for this framework (see load_scope_reference in prompts.py),
+# the same content generate_insight above studies/reproduces when generating.
+# No per-researcher customization: the doc is the single source of truth.
 # ---------------------------------------------------------------------------
-
-def _normalize_grid(grid) -> list:
-    if not isinstance(grid, list) or not all(isinstance(row, list) for row in grid):
-        raise HTTPException(400, "grid must be a list of rows")
-    return [[str(cell) if cell is not None else "" for cell in row] for row in grid]
-
-
-def _serialize_framework_objective(obj: FrameworkObjective) -> dict:
-    output_format, helps_to_identify, example = _parse_styling(obj.styling)
-    return {
-        "framework": obj.framework,
-        "objective": obj.objective,
-        "helpsToIdentify": helps_to_identify,
-        "outputFormat": output_format,
-        "example": example,
-        "updated_at": obj.updated_at,
-    }
-
 
 def _markdown_table_to_grid(markdown: str) -> list:
     headers, rows = _parse_markdown_table(markdown)
     return [headers, *(rows or [])] if headers else []
 
 
-def _default_framework_objective(framework: str):
-    """Falls back to this framework's built-in reference-doc content (see
-    prompts.py) for the Objective & Output overlay when the researcher hasn't
-    saved their own bundle for it yet - so e.g. Task Flow Analysis shows the
-    researcher's own reference doc out of the box instead of a blank form.
-    Scoped to frameworks that actually have a full default bundle (currently
-    just Task Flow Analysis) rather than every framework with a partial
-    DEFAULT_OBJECTIVES/DEFAULT_EXAMPLES entry, so the other frameworks' overlays
-    keep their existing blank-until-customized behavior."""
-    if framework not in DEFAULT_OUTPUT_FORMATS:
+@app.get("/api/framework-objectives/{framework}")
+def get_framework_objective(framework: str, user_id: str = Depends(get_current_user)):
+    scope_ref = load_scope_reference(framework)
+    if not scope_ref:
         return None
+    prior = prior_framework(framework)
     return {
         "framework": framework,
-        "objective": DEFAULT_OBJECTIVES.get(framework, ""),
-        "helpsToIdentify": _markdown_table_to_grid(DEFAULT_HELPS_TO_IDENTIFY.get(framework)),
-        "outputFormat": DEFAULT_OUTPUT_FORMATS.get(framework, []),
-        "example": _markdown_table_to_grid(DEFAULT_EXAMPLES.get(framework)),
-        "updated_at": None,
+        # None for Empathy Mapping - its real input is this chat's own transcript,
+        # not a prior stage's output, so the frontend falls back to showing that.
+        "input": f"Output of {prior}" if prior else None,
+        "objective": scope_ref.get("objective") or "",
+        "helpsToIdentify": _markdown_table_to_grid(scope_ref.get("helps_to_identify")),
+        "outputFormat": _markdown_table_to_grid(scope_ref.get("output_format")),
     }
-
-
-def _is_empty_grid(grid: list) -> bool:
-    return not any((cell or "").strip() for row in (grid or []) for cell in row)
-
-
-@app.get("/api/framework-objectives/{framework}")
-def get_framework_objective(framework: str, user_id: str = Depends(get_current_user), db=Depends(get_db)):
-    obj = db.query(FrameworkObjective).filter_by(researcher_id=user_id, framework=framework).first()
-    defaults = _default_framework_objective(framework)
-    if not obj:
-        return defaults
-
-    result = _serialize_framework_objective(obj)
-    # A saved row can predate a piece of this framework's default bundle (e.g.
-    # this researcher saved just the Objective and Helps to identify before
-    # Output/Example had defaults) - fill in only the still-blank pieces from
-    # the built-in default, per field, rather than an all-or-nothing choice
-    # between "saved" and "default" for the whole bundle.
-    if defaults:
-        if not (result["objective"] or "").strip():
-            result["objective"] = defaults["objective"]
-        if _is_empty_grid(result["helpsToIdentify"]):
-            result["helpsToIdentify"] = defaults["helpsToIdentify"]
-        if _is_empty_grid(result["outputFormat"]):
-            result["outputFormat"] = defaults["outputFormat"]
-        if _is_empty_grid(result["example"]):
-            result["example"] = defaults["example"]
-    return result
-
-
-@app.post("/api/framework-objectives/{framework}")
-def save_framework_objective(framework: str, payload: dict,
-                              user_id: str = Depends(get_current_user), db=Depends(get_db)):
-    objective = (payload.get("objective") or "").strip()
-    output_format = _normalize_grid(payload.get("outputFormat"))
-    helps_to_identify = _normalize_grid(payload.get("helpsToIdentify"))
-    example = _normalize_grid(payload.get("example"))
-    styling = json.dumps({
-        "outputFormat": output_format,
-        "helpsToIdentify": helps_to_identify,
-        "example": example,
-    })
-
-    obj = db.query(FrameworkObjective).filter_by(researcher_id=user_id, framework=framework).first()
-    if obj:
-        obj.objective = objective
-        obj.styling = styling
-    else:
-        obj = FrameworkObjective(researcher_id=user_id, framework=framework, objective=objective, styling=styling)
-        db.add(obj)
-    db.commit(); db.refresh(obj)
-    return _serialize_framework_objective(obj)
 
 
 @app.get("/api/group-chat/sessions/{session_id}/insight")
@@ -1069,6 +938,25 @@ def get_group_session_insight(session_id: str, framework: str,
     return {"framework": framework, "insight": record.content, "validated_rows": record.validated_rows or []}
 
 
+@app.get("/api/group-chat/sessions/{session_id}/insight-status")
+def get_group_session_insight_status(session_id: str, user_id: str = Depends(get_current_user), db=Depends(get_db)):
+    """Group-chat equivalent of get_session_insight_status."""
+    session = db.query(GroupChatSession).filter_by(id=session_id, researcher_id=user_id).first()
+    if not session:
+        raise HTTPException(404, "Session not found")
+    status = {}
+    for framework in FRAMEWORK_CHAIN:
+        missing = _missing_chain(GroupSessionInsight, session_id, db, framework)
+        record = db.query(GroupSessionInsight).filter_by(session_id=session_id, framework=framework).first()
+        status[framework] = {
+            "unlocked": not missing,
+            "reason": f"Generate and verify {missing[0]} first" if missing else None,
+            "generated": bool(record and record.content),
+            "verified": _insight_is_verified(GroupSessionInsight, session_id, db, framework),
+        }
+    return status
+
+
 @app.post("/api/group-chat/sessions/{session_id}/insight")
 def generate_group_session_insight(session_id: str, framework: str,
                                     user_id: str = Depends(get_current_user), db=Depends(get_db)):
@@ -1076,18 +964,9 @@ def generate_group_session_insight(session_id: str, framework: str,
     if not session:
         raise HTTPException(404, "Session not found")
 
-    if framework == "JTBD Analysis":
-        empathy_content = _require_empathy_mapping_insight(GroupSessionInsight, session_id, db)
-        insight = generate_insight(framework, empathy_content, [], user_id, db,
-                                    transcript_label="Empathy Mapping insight")
-    elif framework == "User Journey Mapping":
-        jtbd_content = _require_jtbd_analysis_insight(GroupSessionInsight, session_id, db)
-        insight = generate_insight(framework, jtbd_content, [], user_id, db,
-                                    transcript_label="JTBD Analysis insight")
-    elif framework == "Task Flow Analysis":
-        ujm_content = _require_user_journey_mapping_insight(GroupSessionInsight, session_id, db)
-        insight = generate_insight(framework, ujm_content, [], user_id, db,
-                                    transcript_label="User Journey Mapping insight")
+    prior_content, prior_label = _require_prior_insight(GroupSessionInsight, session_id, db, framework)
+    if prior_content is not None:
+        insight = generate_insight(framework, prior_content, [], user_id, db, transcript_label=prior_label)
     else:
         messages = db.query(GroupMessage).filter_by(session_id=session_id).order_by(GroupMessage.created_at).all()
         if not messages:

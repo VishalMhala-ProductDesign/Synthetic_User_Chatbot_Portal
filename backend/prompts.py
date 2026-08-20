@@ -1,4 +1,8 @@
 
+import re
+from pathlib import Path
+
+
 def build_persona_system_prompt(persona) -> str:
     custom = persona.custom_attributes or {}
     custom_lines = "\n".join(f"- {k}: {v}" for k, v in custom.items())
@@ -45,56 +49,82 @@ def split_reply_and_grounding(raw_text: str):
     return raw_text.strip(), []
 
 
-DEFAULT_OBJECTIVES = {
-    "Empathy Mapping": (
-        "Understand the user's perspective by capturing what they think, feel, "
-        "say, and do in a specific situation, so that design decisions are "
-        "grounded in real user needs and behaviours."
-    ),
-    "JTBD Analysis": (
-        "Understand the fundamental job the user is trying to accomplish, "
-        "independent of the product or solution they currently use."
-    ),
-    "User Journey Mapping": (
-        "Understand the user's complete experience across a process, identify "
-        "friction and unmet needs, and discover opportunities for improvement "
-        "or innovation."
-    ),
-    "Task Flow Analysis": (
-        "Understand exactly how a user completes a specific task, identify "
-        "unnecessary steps, friction, decisions, and errors, and determine how "
-        "the task can be made simpler and more efficient."
-    ),
+# scope/00_overview.md through scope/19_outcome_kpi_analysis.md is the
+# researcher's own reference doc for the full 19-stage framework - the single
+# source of truth for what each framework's Objective/Helps to Identify/Output
+# should be. Read live from disk (see load_scope_reference) rather than copied
+# into this file, so the read-only "Objective & Output" overlay and the
+# generation prompt below can never drift out of sync with the doc again.
+SCOPE_DIR = Path(__file__).resolve().parent.parent / "scope"
+
+FRAMEWORK_SCOPE_FILES = {
+    "Empathy Mapping": "01_empathy_mapping.md",
+    "JTBD Analysis": "02_jtbd_analysis.md",
+    "User Journey Mapping": "03_user_journey_mapping.md",
+    "Task Flow Analysis": "04_task_flow_analysis.md",
+    "Workflow Analysis": "05_workflow_analysis.md",
+    "Decision Analysis": "06_decision_analysis.md",
+    "Pain Point + Friction Analysis": "07_pain_point_friction_analysis.md",
+    "System Mapping": "08_system_mapping.md",
+    "Root Cause Analysis": "09_root_cause_analysis.md",
+    "Opportunity Analysis": "10_opportunity_analysis.md",
+    "AI Opportunity Analysis": "11_ai_opportunity_analysis.md",
+    "Human–AI Workflow Analysis": "12_human_ai_workflow_analysis.md",
+    "AI Capability Analysis": "13_ai_capability_analysis.md",
+    "Agent / AI Skill Analysis": "14_agent_ai_skill_analysis.md",
+    "Future-State Workflow": "15_future_state_workflow.md",
+    "Human–AI Interaction Design": "16_human_ai_interaction_design.md",
+    "Trust & Control Analysis": "17_trust_control_analysis.md",
+    "Validation & Usability Analysis": "18_validation_usability_analysis.md",
+    "Outcome / KPI Analysis": "19_outcome_kpi_analysis.md",
 }
 
 
-# Mirrors the "Helps to identify" grid in the Objective & Output overlay -
-# only used as a fallback for a framework the researcher hasn't filled that
-# grid in for yet (see effective_helps_to_identify below).
-DEFAULT_HELPS_TO_IDENTIFY = {
-    "Task Flow Analysis": """| Objective | What you learn |
-| --- | --- |
-| Understand the task | What the user is trying to accomplish |
-| Break down the steps | Every action required to complete the task |
-| Identify decision points | Where the user must choose or make a judgment |
-| Find friction | Where the task becomes difficult, slow, or confusing |
-| Identify unnecessary steps | Repetition, redundant inputs, extra navigation |
-| Identify dependencies | Data, systems, people, or information needed |
-| Find errors & failure points | Where users can make mistakes or get blocked |
-| Identify optimization opportunities | Where UX, automation, or AI can improve the task |""",
-}
+# The chain order from scope/00_overview.md: each framework's real Input is
+# the previous framework's (researcher-verified) Output, except Empathy
+# Mapping, whose input is the raw chat transcript - it has no predecessor.
+FRAMEWORK_CHAIN = list(FRAMEWORK_SCOPE_FILES.keys())
 
 
-# The "Output" grid shown in the Objective & Output overlay - a blank,
-# numbered template of the exact layout the finished analysis should be
-# poured into (see the researcher's reference doc). Only used as a fallback
-# for a framework the researcher hasn't filled that grid in for yet.
-DEFAULT_OUTPUT_FORMATS = {
-    "Task Flow Analysis": [
-        ["Step", "User Action", "Decision", "Friction", "Potential Error", "Optimization Opportunity"],
-        *[[str(i), "", "", "", "", ""] for i in range(1, 11)],
-    ],
-}
+def prior_framework(framework: str) -> str:
+    """Returns the framework immediately before `framework` in the chain, or
+    None if `framework` is Empathy Mapping (no predecessor) or isn't in the
+    chain at all."""
+    try:
+        index = FRAMEWORK_CHAIN.index(framework)
+    except ValueError:
+        return None
+    return FRAMEWORK_CHAIN[index - 1] if index > 0 else None
+
+
+def _extract_scope_section(markdown: str, heading: str) -> str:
+    """Returns the body text directly under an "## <heading>" line in one of the
+    scope docs, up to the next heading or end of file (e.g. stops before
+    Empathy Mapping's own "## Validation Rules" section, which the overlay
+    doesn't show)."""
+    pattern = rf"^##\s*{re.escape(heading)}\s*\n(.*?)(?=\n#{{1,6}}\s|\Z)"
+    match = re.search(pattern, markdown, re.MULTILINE | re.DOTALL)
+    return match.group(1).strip() if match else None
+
+
+def load_scope_reference(framework: str) -> dict:
+    """Reads this framework's scope/<NN>_....md reference doc and returns its
+    Objective, Helps to Identify, and Output sections - the same three pieces
+    the read-only "Objective & Output" overlay displays, and the ones
+    build_insight_prompt studies/reproduces when generating. Returns None for
+    a framework with no scope doc."""
+    filename = FRAMEWORK_SCOPE_FILES.get(framework)
+    if not filename:
+        return None
+    try:
+        markdown = (SCOPE_DIR / filename).read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return None
+    return {
+        "objective": _extract_scope_section(markdown, "Objective"),
+        "helps_to_identify": _extract_scope_section(markdown, "Helps to Identify"),
+        "output_format": _extract_scope_section(markdown, "Output"),
+    }
 
 
 # A worked example for calibration only - shows the model the expected rigor and
@@ -289,12 +319,12 @@ input into a single combined view; where they clearly diverge on something mater
 note the difference briefly inside that row rather than splitting the whole analysis
 by persona."""
 
-    # A researcher's own saved objective/example (and the shared Google Doc merged
-    # into focus upstream in generate_insight) always win; each framework's
-    # built-in default only fills in for whichever piece the researcher hasn't set.
-    effective_focus = focus or DEFAULT_OBJECTIVES.get(framework)
+    # focus/helps_to_identify arrive already resolved (scope doc + shared Google
+    # Doc merged upstream in generate_insight) - only the worked example still
+    # has a built-in fallback, since the scope docs no longer carry one.
+    effective_focus = focus
     effective_example = example or DEFAULT_EXAMPLES.get(framework)
-    effective_helps_to_identify = helps_to_identify or DEFAULT_HELPS_TO_IDENTIFY.get(framework)
+    effective_helps_to_identify = helps_to_identify
 
     study_instructions = ""
     if effective_focus or effective_helps_to_identify:

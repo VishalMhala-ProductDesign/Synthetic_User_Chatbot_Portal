@@ -4,6 +4,7 @@ import { api } from "../api";
 import { useAuth } from "../auth/AuthContext";
 import PersonaDrawer from "../components/PersonaDrawer";
 import GroupDrawer from "../components/GroupDrawer";
+import ConfirmDialog from "../components/ConfirmDialog";
 
 export default function PersonasPage() {
   const { token } = useAuth();
@@ -20,6 +21,10 @@ export default function PersonasPage() {
   const [editingGroup, setEditingGroup] = useState(null);
 
   const [viewFilter, setViewFilter] = useState("all");
+  // Which "Delete" click is pending confirmation - { type: "persona" | "group", item }
+  // or null. Holding the item itself (not just an id) so the dialog's message
+  // can show its name without a second lookup.
+  const [pendingDelete, setPendingDelete] = useState(null);
 
   const loadPersonas = useCallback(async () => {
     setLoading(true);
@@ -80,10 +85,8 @@ export default function PersonasPage() {
     await loadPersonas();
   }
 
-  async function handleDelete(persona) {
-    if (!window.confirm(`Delete persona "${persona.name}"? This cannot be undone.`)) return;
-    await api.deletePersona(token, persona.id);
-    await loadPersonas();
+  function handleDelete(persona) {
+    setPendingDelete({ type: "persona", item: persona });
   }
 
   function openCreateGroup() {
@@ -125,9 +128,18 @@ export default function PersonasPage() {
     await loadPersonas();
   }
 
-  async function handleGroupDelete(group) {
-    if (!window.confirm(`Delete group "${group.name}"? Persona membership in this group will be removed.`)) return;
-    await api.deleteGroup(token, group.id);
+  function handleGroupDelete(group) {
+    setPendingDelete({ type: "group", item: group });
+  }
+
+  async function confirmPendingDelete() {
+    if (!pendingDelete) return;
+    if (pendingDelete.type === "persona") {
+      await api.deletePersona(token, pendingDelete.item.id);
+    } else {
+      await api.deleteGroup(token, pendingDelete.item.id);
+    }
+    setPendingDelete(null);
     await loadPersonas();
   }
 
@@ -291,6 +303,18 @@ export default function PersonasPage() {
           </div>
         );
       })()}
+
+      {pendingDelete && (
+        <ConfirmDialog
+          message={
+            pendingDelete.type === "persona"
+              ? `Delete persona "${pendingDelete.item.name}"? This cannot be undone.`
+              : `Delete group "${pendingDelete.item.name}"? Persona membership in this group will be removed.`
+          }
+          onConfirm={confirmPendingDelete}
+          onCancel={() => setPendingDelete(null)}
+        />
+      )}
     </div>
   );
 }

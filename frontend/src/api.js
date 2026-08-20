@@ -138,6 +138,8 @@ export const api = {
       method: "PUT",
       ...jsonBody(token, { content, validated_rows: validatedRows }),
     }).then(handle),
+  getSessionInsightStatus: (token, sessionId) =>
+    fetch(`${API_BASE}/api/chat/sessions/${sessionId}/insight-status`, { headers: authHeaders(token) }).then(handle),
 
   exportPersona: (token, id) => downloadFile(`${API_BASE}/api/personas/${id}/export`, token, `persona-${id}.json`),
 
@@ -174,15 +176,12 @@ export const api = {
       method: "PUT",
       ...jsonBody(token, { content, validated_rows: validatedRows }),
     }).then(handle),
+  getGroupSessionInsightStatus: (token, sessionId) =>
+    fetch(`${API_BASE}/api/group-chat/sessions/${sessionId}/insight-status`, { headers: authHeaders(token) }).then(handle),
 
   getFrameworkObjective: (token, framework) =>
     fetch(`${API_BASE}/api/framework-objectives/${encodeURIComponent(framework)}`, {
       headers: authHeaders(token),
-    }).then(handle),
-  saveFrameworkObjective: (token, framework, { objective, helpsToIdentify, outputFormat, example }) =>
-    fetch(`${API_BASE}/api/framework-objectives/${encodeURIComponent(framework)}`, {
-      method: "POST",
-      ...jsonBody(token, { objective, helpsToIdentify, outputFormat, example }),
     }).then(handle),
 };
 

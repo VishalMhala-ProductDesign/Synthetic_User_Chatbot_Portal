@@ -90,19 +90,25 @@ function mergeRows(keptRows, newRows) {
 // fall back to rendering the cell as plain text.
 const EVIDENCE_LABEL_RE = /(Thinks|Feels|Says|Does):\s*/gi;
 
-// JTBD Analysis has no per-row "Validation" column of its own to check off
-// (see hasValidationColumn) - it's derived from Empathy Mapping's already-
-// verified rows instead. This sentinel key lives inside the same
+// Every framework except Empathy Mapping has no per-row "Validation" column
+// of its own to check off (see hasValidationColumn) - each is instead built
+// from the previous framework's already-verified rows (see prior_framework/
+// _require_prior_insight in main.py), and gets a single whole-table
+// "researcher-verified" checkbox. That checkbox's state lives inside the same
 // validatedRows Set as real per-row keys (see rowValidationKey) so the
 // existing save/persist plumbing (onValidatedRowsChange, onSave) covers it
-// for free, marking the whole generated table as researcher-verified rather
-// than any specific row. It never collides with a real row's key since
-// rowValidationKey is a plain "cell cell cell" join with no such marker.
-const JTBD_VERIFIED_KEY = "__jtbd_verified__";
+// for free. It never collides with a real row's key since rowValidationKey is
+// a plain "cell cell cell" join with no such marker. JTBD Analysis and User
+// Journey Mapping keep their original literal keys for backward compatibility
+// with already-saved validated_rows; mirrors _LEGACY_VERIFIED_KEYS in main.py.
+const LEGACY_VERIFIED_KEYS = {
+  "JTBD Analysis": "__jtbd_verified__",
+  "User Journey Mapping": "__ujm_verified__",
+};
 
-// Same idea as JTBD_VERIFIED_KEY, for User Journey Mapping's own whole-table
-// "researcher-verified" checkbox.
-const UJM_VERIFIED_KEY = "__ujm_verified__";
+function verifiedKey(framework) {
+  return LEGACY_VERIFIED_KEYS[framework] || `__verified__${framework}__`;
+}
 
 function parseEvidenceSegments(text) {
   if (!text) return null;
@@ -777,24 +783,14 @@ export default function InsightDrawer({
         </div>
 
         <div className="drawer-footer">
-          {framework === "JTBD Analysis" && tableRows.length > 0 && (
+          {!hasValidationColumn && tableRows.length > 0 && (
             <label className="validate-checkbox drawer-footer-checkbox">
               <input
                 type="checkbox"
-                checked={validatedRows.has(JTBD_VERIFIED_KEY)}
-                onChange={(e) => setRowValidated(JTBD_VERIFIED_KEY, e.target.checked)}
+                checked={validatedRows.has(verifiedKey(framework))}
+                onChange={(e) => setRowValidated(verifiedKey(framework), e.target.checked)}
               />
-              Verified JTBD
-            </label>
-          )}
-          {framework === "User Journey Mapping" && tableRows.length > 0 && (
-            <label className="validate-checkbox drawer-footer-checkbox">
-              <input
-                type="checkbox"
-                checked={validatedRows.has(UJM_VERIFIED_KEY)}
-                onChange={(e) => setRowValidated(UJM_VERIFIED_KEY, e.target.checked)}
-              />
-              Verified UJM
+              Verified {framework}
             </label>
           )}
           {hasValidationColumn && tableRows.length > 0 && (

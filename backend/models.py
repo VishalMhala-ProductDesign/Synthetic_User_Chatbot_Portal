@@ -141,17 +141,3 @@ class MaturityRecommendation(Base):
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
 
-class FrameworkObjective(Base):
-    """One (objective, styling) pair per (researcher, framework) - e.g. a separate
-    pair for "Empathy Mapping" vs "User Journey Mapping". Both are folded into every
-    insight generated for that specific framework, for any persona or persona group
-    the researcher owns. Saving replaces the existing pair for that framework only."""
-    __tablename__ = "framework_objectives"
-    id = Column(Uuid(as_uuid=False), primary_key=True, default=new_uuid)
-    researcher_id = Column(Uuid(as_uuid=False), ForeignKey("users.id"), nullable=False)
-    framework = Column(String, nullable=False)
-    objective = Column(Text, nullable=True)
-    styling = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=datetime.datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
-    __table_args__ = (UniqueConstraint("researcher_id", "framework", name="uq_researcher_framework"),)

@@ -175,53 +175,25 @@ label {
   width: 100%;
 }
 
-.objective-grid td {
+.objective-grid td,
+.objective-grid th {
   border: 1px solid var(--border);
-  padding: 0;
+  padding: 8px 10px;
+  text-align: left;
 }
 
 .objective-grid tr:first-child td {
   border-top: none;
 }
 
-.objective-grid td:first-child {
+.objective-grid td:first-child,
+.objective-grid th:first-child {
   border-left: none;
 }
 
-.objective-grid input {
-  border: none;
-  border-radius: 0;
-  min-width: 100px;
-  background: transparent;
-}
-
-.objective-grid-header-cell {
+.objective-grid th {
   font-weight: 600;
   background: var(--bg-subtle);
-}
-
-.objective-grid-cell-selected {
-  background: var(--accent-bg);
-}
-
-.objective-grid-row-actions,
-.objective-grid-col-actions {
-  border: none !important;
-  width: 32px;
-  text-align: center;
-  vertical-align: middle;
-}
-
-.objective-grid-remove {
-  padding: 4px 8px;
-  font-size: 14px;
-  line-height: 1;
-}
-
-.objective-grid-controls {
-  display: flex;
-  gap: 8px;
-  margin-top: 4px;
 }
 
 /* Auth pages */
@@ -318,11 +290,12 @@ label {
   max-width: none;
 }
 
-/* Excludes .drawer-overlay: it's a position:fixed, full-viewport modal layer
-   (see .drawer-overlay below) and must never be capped/centered like the
-   page's normal-flow content, or its drawer panel lands away from the true
-   right edge of the screen instead of docking to it. */
-.personas-page > *:not(.page-header):not(.drawer-overlay) {
+/* Excludes .drawer-overlay and .close-confirm-overlay: both are
+   position:fixed, full-viewport modal layers (see .drawer-overlay and
+   .close-confirm-overlay below) and must never be capped/centered like the
+   page's normal-flow content, or the overlay ends up squeezed into a
+   centered column instead of dimming the full screen. */
+.personas-page > *:not(.page-header):not(.drawer-overlay):not(.close-confirm-overlay) {
   width: 100%;
   max-width: 1100px;
   margin-left: auto;
@@ -928,6 +901,10 @@ label {
 
 .framework-card {
   width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
   text-align: left;
   padding: 14px 16px;
   border: 1px solid var(--border);
@@ -936,6 +913,46 @@ label {
   font-size: 14px;
   font-weight: 500;
   color: var(--text-h);
+}
+
+.framework-card-label {
+  flex: 1;
+  min-width: 0;
+}
+
+.framework-legend-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: none;
+  font-size: 10.5px;
+  font-weight: 500;
+  white-space: nowrap;
+  color: var(--text);
+  opacity: 0.75;
+}
+
+.framework-legend-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex: none;
+}
+
+.legend-verified .framework-legend-dot {
+  background: #22c55e;
+}
+
+.legend-unverified .framework-legend-dot {
+  background: #f59e0b;
+}
+
+.legend-ready .framework-legend-dot {
+  background: #3b82f6;
+}
+
+.legend-locked .framework-legend-dot {
+  background: var(--border);
 }
 
 .framework-card:hover:not(:disabled) {
@@ -947,6 +964,12 @@ label {
   border-color: var(--accent);
   background: var(--accent-bg);
   color: var(--accent);
+}
+
+.framework-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
 .framework-row {

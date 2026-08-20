@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth/AuthContext";
 import PersonaDrawer from "../components/PersonaDrawer";
+import ConfirmDialog from "../components/ConfirmDialog";
 
 const FIELD_LABELS = {
   age: "Age",
@@ -24,6 +25,7 @@ export default function PersonaDetailPage() {
   const [error, setError] = useState("");
   const [editing, setEditing] = useState(false);
   const [exportBusy, setExportBusy] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -61,7 +63,6 @@ export default function PersonaDetailPage() {
   }
 
   async function handleDelete() {
-    if (!window.confirm(`Delete persona "${persona.name}"? This cannot be undone.`)) return;
     await api.deletePersona(token, personaId);
     navigate("/personas");
   }
@@ -101,11 +102,19 @@ export default function PersonaDetailPage() {
           <button type="button" onClick={() => setEditing((v) => !v)}>
             {editing ? "Cancel edit" : "Edit"}
           </button>
-          <button type="button" className="danger" onClick={handleDelete}>
+          <button type="button" className="danger" onClick={() => setConfirmingDelete(true)}>
             Delete
           </button>
         </div>
       </div>
+
+      {confirmingDelete && (
+        <ConfirmDialog
+          message={`Delete persona "${persona.name}"? This cannot be undone.`}
+          onConfirm={handleDelete}
+          onCancel={() => setConfirmingDelete(false)}
+        />
+      )}
 
       {editing && (
         <PersonaDrawer
