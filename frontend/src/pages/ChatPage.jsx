@@ -27,6 +27,7 @@ const ANALYSIS_FRAMEWORKS = [
   "Trust & Control Analysis",
   "Validation & Usability Analysis",
   "Outcome / KPI Analysis",
+  "Product Design Insight",
 ];
 
 // Maps a "Grounded in" label (as the model names it, per prompts.py's system

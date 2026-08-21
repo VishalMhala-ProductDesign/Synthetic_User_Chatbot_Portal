@@ -49,8 +49,8 @@ def split_reply_and_grounding(raw_text: str):
     return raw_text.strip(), []
 
 
-# scope/00_overview.md through scope/19_outcome_kpi_analysis.md is the
-# researcher's own reference doc for the full 19-stage framework - the single
+# scope/00_overview.md through scope/20_product_design_insight.md is the
+# researcher's own reference doc for the full 20-stage framework - the single
 # source of truth for what each framework's Objective/Helps to Identify/Output
 # should be. Read live from disk (see load_scope_reference) rather than copied
 # into this file, so the read-only "Objective & Output" overlay and the
@@ -77,6 +77,7 @@ FRAMEWORK_SCOPE_FILES = {
     "Trust & Control Analysis": "17_trust_control_analysis.md",
     "Validation & Usability Analysis": "18_validation_usability_analysis.md",
     "Outcome / KPI Analysis": "19_outcome_kpi_analysis.md",
+    "Product Design Insight": "20_product_design_insight.md",
 }
 
 
@@ -350,10 +351,12 @@ and what you emphasize - this is content guidance, not a layout to reproduce.
         # deprioritize in favor of the more detailed default instructions.
         format_instructions = f"""{study_instructions}Once you've studied that, generate the {framework} insight and put it into the
 researcher's exact output format below - reproduce that same arrangement using
-Markdown (a table, headed sections, etc. - whichever best reproduces what's shown)
-rather than substituting a generic table of your own. Output ONLY that table -
-nothing before it, nothing after it, no extra sections or commentary. This is the
-primary instruction for how to structure the output.
+Markdown (a table, headed sections, etc. - whichever best reproduces what's shown),
+including every part of it (e.g. a table followed by additional written-out
+sections), rather than substituting a generic table of your own or dropping
+anything past the first table. Output ONLY that content - nothing before it,
+nothing after it, no extra commentary of your own. This is the primary
+instruction for how to structure the output.
 
 Output format to populate:
 \"\"\"

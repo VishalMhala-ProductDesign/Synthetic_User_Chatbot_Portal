@@ -180,7 +180,11 @@ export const api = {
     fetch(`${API_BASE}/api/group-chat/sessions/${sessionId}/insight-status`, { headers: authHeaders(token) }).then(handle),
 
   getFrameworkObjective: (token, framework) =>
-    fetch(`${API_BASE}/api/framework-objectives/${encodeURIComponent(framework)}`, {
+    // Sent as a query param, not a path segment - a framework name can contain
+    // "/" (e.g. "Outcome / KPI Analysis"), and even URL-encoded as %2F, the
+    // Vite dev-server proxy decodes it back to a literal "/" before forwarding,
+    // which FastAPI then reads as extra path segments and 404s.
+    fetch(`${API_BASE}/api/framework-objectives?${new URLSearchParams({ framework })}`, {
       headers: authHeaders(token),
     }).then(handle),
 };

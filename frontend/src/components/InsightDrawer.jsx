@@ -44,6 +44,27 @@ function stringifyMarkdownTable(headers, rows) {
   return [headerLine, separatorLine, ...rowLines].join("\n");
 }
 
+// Whatever Markdown follows the LAST "|"-prefixed line in `markdown`, trimmed -
+// e.g. Product Design Insight's "The Bigger Product Design Insight"/"Design
+// Implications"/final-structure prose after its per-KPI table. Empty string
+// for a framework whose content is nothing but a table (every other one),
+// so this is a no-op for them - parseMarkdownTable above already ignores
+// these same non-"|" lines when building the table itself, so the two never
+// double-count content.
+function extractTrailingMarkdown(markdown) {
+  if (!markdown) return "";
+  const lines = markdown.split("\n");
+  let lastTableLineIndex = -1;
+  lines.forEach((line, i) => {
+    if (line.trim().startsWith("|")) lastTableLineIndex = i;
+  });
+  if (lastTableLineIndex === -1) return "";
+  return lines
+    .slice(lastTableLineIndex + 1)
+    .join("\n")
+    .trim();
+}
+
 // A stable identity for a table row's "manually validated" checkbox state,
 // based on its content rather than its position - so when the researcher
 // clicks Regenerate, a row whose claim comes back unchanged keeps its
@@ -638,6 +659,10 @@ export default function InsightDrawer({
   const [prevContent, setPrevContent] = useState(content);
   const [tableHeaders, setTableHeaders] = useState(() => parseMarkdownTable(content)?.headers ?? []);
   const [tableRows, setTableRows] = useState(() => parseMarkdownTable(content)?.rows ?? []);
+  // Markdown after the table (e.g. Product Design Insight's "The Bigger
+  // Product Design Insight"/Design Implications/final-structure write-up) -
+  // "" for every framework whose content is nothing but a table.
+  const [trailingMarkdown, setTrailingMarkdown] = useState(() => extractTrailingMarkdown(content));
   // Tracks whether this drawer has ever actually shown generated content -
   // distinguishes the initial generation's null->value transition (nothing's
   // changed yet, already auto-saved) from a later regenerate's null->value
@@ -658,9 +683,11 @@ export default function InsightDrawer({
         setHasGeneratedOnce(true);
         setTableHeaders(parsedNow.headers);
         setTableRows(mergeRows(keptRows, parsedNow.rows));
+        setTrailingMarkdown(extractTrailingMarkdown(content));
       } else {
         setTableHeaders([]);
         setTableRows([]);
+        setTrailingMarkdown("");
       }
     }
   }
@@ -706,14 +733,16 @@ export default function InsightDrawer({
   }
 
   // Persists exactly what's currently displayed (including any rows removed
-  // above) plus the validated-row keys, so this exact state - not a re-parse
-  // of the original LLM output - is what's shown again on the next visit.
+  // above, plus any trailing prose after the table - e.g. Product Design
+  // Insight's own write-up - left untouched by row edits) plus the
+  // validated-row keys, so this exact state - not a re-parse of the original
+  // LLM output - is what's shown again on the next visit.
   async function handleSave() {
     if (!onSave) return false;
     setSaveStatus("saving");
     try {
       await onSave({
-        content: stringifyMarkdownTable(tableHeaders, tableRows),
+        content: [stringifyMarkdownTable(tableHeaders, tableRows), trailingMarkdown].filter(Boolean).join("\n\n"),
         validatedRows: Array.from(validatedRows),
       });
       setSaveStatus("saved");
@@ -772,10 +801,15 @@ export default function InsightDrawer({
                 sourceTable={sourceTable}
                 hasSource={messages.length > 0}
               />
+              {trailingMarkdown && (
+                <div className="markdown-body insight-trailing-markdown">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{trailingMarkdown}</ReactMarkdown>
+                </div>
+              )}
             </div>
           ) : (
             content && (
-              <div className="markdown-body">
+              <div className="markdown-body insight-fallback-markdown">
                 <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
               </div>
             )
@@ -783,7 +817,7 @@ export default function InsightDrawer({
         </div>
 
         <div className="drawer-footer">
-          {!hasValidationColumn && tableRows.length > 0 && (
+          {!hasValidationColumn && !!content && (
             <label className="validate-checkbox drawer-footer-checkbox">
               <input
                 type="checkbox"

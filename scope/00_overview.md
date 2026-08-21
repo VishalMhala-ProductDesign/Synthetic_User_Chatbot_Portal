@@ -21,6 +21,7 @@
 | 17 | **Trust & Control Analysis**        | How does the user understand, verify and control AI?                   | Trust mechanisms          |
 | 18 | **Validation & Usability Analysis** | Does the new solution actually work?                                   | Design improvements       |
 | 19 | **Outcome / KPI Analysis**          | Did we improve the business and user outcome?                          | Success metrics           |
+| 20 | **Product Design Insight**          | What does the outcome data tell us about the product design?           | Design implications       |
 
 
 Complete UX / AI Product Analysis Framework — Summary
@@ -65,6 +66,8 @@ TRUST & CONTROL ANALYSIS
 VALIDATION & USABILITY ANALYSIS
       ↓
 OUTCOME / KPI ANALYSIS
+      ↓
+PRODUCT DESIGN INSIGHT
 
 2. Summary Table
 
@@ -89,6 +92,7 @@ OUTCOME / KPI ANALYSIS
 | **Trust & Control Analysis**        | Ensure users can understand and control AI                      | **How can users trust and control AI appropriately?**                    | Transparency, controls, guardrails                   |
 | **Validation & Usability Analysis** | Test whether the proposed solution works                        | **Does the solution actually work for users?**                           | Usability findings & improvements                    |
 | **Outcome / KPI Analysis**          | Measure whether the solution creates value                      | **Did the solution achieve the intended outcome?**                       | KPIs, impact, value                                  |
+| **Product Design Insight**          | Interpret what the outcome data means for the product design    | **What does the outcome data tell us about the product design?**        | Pattern, insight, design implications                |
 
 
 3. What Each Stage Produces
@@ -420,6 +424,19 @@ Data-quality issues detected before simulation	60%	95%
 Simulation rework	High	Reduced
 User confidence	Low	High
 Successful first-time simulation runs	70%	90%
+
+11. Product Design Insight
+
+Finally, interpret the KPI results:
+
+What does each outcome tell us about the product design - not just whether the KPI moved, but what that reveals?
+
+Example:
+
+KPI-01: Task Completion Rate → Users need to resolve exceptions without leaving the interface → The experience should support complete exception-resolution journeys within the workflow.
+
+Across all KPIs, look for the pattern (e.g. context, explanation, human control, error prevention, handback), state the higher-level Product Design Insight that pattern points to, then convert it into concrete Design Implications the team can act on.
+
 The Entire Framework in One View
                     USER
                      │
@@ -486,8 +503,11 @@ The Entire Framework in One View
                      │
                      ▼
            OUTCOME / KPI
+                     │
+                     ▼
+      PRODUCT DESIGN INSIGHT
 The simplest way to remember the framework
 
-Understand the User → Understand the Job → Understand the Journey → Understand the Work → Understand the Decisions → Find the Problems → Find the Causes → Find the Opportunities → Determine Where AI Fits → Design Human–AI Collaboration → Build the Future Workflow → Design the Interaction → Establish Trust & Control → Validate → Measure Value.
+Understand the User → Understand the Job → Understand the Journey → Understand the Work → Understand the Decisions → Find the Problems → Find the Causes → Find the Opportunities → Determine Where AI Fits → Design Human–AI Collaboration → Build the Future Workflow → Design the Interaction → Establish Trust & Control → Validate → Measure Value → Interpret the Outcome for Design.
 
 This makes the framework much more than a collection of UX techniques: each analysis produces an output that becomes the input for the next analysis.

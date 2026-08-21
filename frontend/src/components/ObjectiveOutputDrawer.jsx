@@ -1,35 +1,24 @@
 import { useEffect, useState } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { api } from "../api";
 import { useAuth } from "../auth/AuthContext";
 
-// Read-only rendering of one of the scope/*.md reference doc's tables - no
-// selection/copy-paste/add-row machinery, since there's nothing to edit here
-// anymore (see load_scope_reference in prompts.py, the content's actual source).
-function ReadOnlyGrid({ grid }) {
-  if (!Array.isArray(grid) || grid.length === 0) {
+// Read-only rendering of one of the scope/*.md reference doc's "Helps to
+// Identify"/"Output" sections - no selection/copy-paste/add-row machinery,
+// since there's nothing to edit here anymore (see load_scope_reference in
+// prompts.py, the content's actual source). Renders the section's raw
+// Markdown rather than parsing it into a table-only grid, so a section that
+// mixes a table with prose (headings, bold lines, a numbered list - e.g.
+// Product Design Insight's Evidence/Pattern/Design Implications) still shows
+// in full instead of silently losing everything past the first table.
+function MarkdownPreview({ markdown }) {
+  if (!markdown) {
     return <p className="empty-state">Not documented for this framework yet.</p>;
   }
-  const [headerRow, ...bodyRows] = grid;
   return (
-    <div className="objective-grid-table-wrap">
-      <table className="objective-grid objective-grid-readonly">
-        <thead>
-          <tr>
-            {headerRow.map((cell, colIndex) => (
-              <th key={colIndex}>{cell}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {bodyRows.map((row, rowIndex) => (
-            <tr key={rowIndex}>
-              {row.map((cell, colIndex) => (
-                <td key={colIndex}>{cell}</td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
+    <div className="markdown-body objective-preview">
+      <ReactMarkdown remarkPlugins={[remarkGfm]}>{markdown}</ReactMarkdown>
     </div>
   );
 }
@@ -39,8 +28,8 @@ export default function ObjectiveOutputDrawer({ framework, sourceLabel, onClose 
 
   const [input, setInput] = useState(null);
   const [objective, setObjective] = useState("");
-  const [helpsToIdentify, setHelpsToIdentify] = useState([]);
-  const [outputFormat, setOutputFormat] = useState([]);
+  const [helpsToIdentify, setHelpsToIdentify] = useState("");
+  const [outputFormat, setOutputFormat] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -61,8 +50,8 @@ export default function ObjectiveOutputDrawer({ framework, sourceLabel, onClose 
         if (cancelled) return;
         setInput(obj?.input || null);
         setObjective(obj?.objective || "");
-        setHelpsToIdentify(obj?.helpsToIdentify || []);
-        setOutputFormat(obj?.outputFormat || []);
+        setHelpsToIdentify(obj?.helpsToIdentify || "");
+        setOutputFormat(obj?.outputFormat || "");
       })
       .catch((err) => !cancelled && setError(err.message))
       .finally(() => !cancelled && setLoading(false));
@@ -101,12 +90,12 @@ export default function ObjectiveOutputDrawer({ framework, sourceLabel, onClose 
 
               <div className="objective-grid-wrap">
                 Helps to identify
-                <ReadOnlyGrid grid={helpsToIdentify} />
+                <MarkdownPreview markdown={helpsToIdentify} />
               </div>
 
               <div className="objective-grid-wrap">
                 Output
-                <ReadOnlyGrid grid={outputFormat} />
+                <MarkdownPreview markdown={outputFormat} />
               </div>
             </>
           )}

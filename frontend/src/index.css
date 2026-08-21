@@ -164,38 +164,6 @@ label {
   text-align: left;
 }
 
-.objective-grid-table-wrap {
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  overflow: hidden;
-}
-
-.objective-grid {
-  border-collapse: collapse;
-  width: 100%;
-}
-
-.objective-grid td,
-.objective-grid th {
-  border: 1px solid var(--border);
-  padding: 8px 10px;
-  text-align: left;
-}
-
-.objective-grid tr:first-child td {
-  border-top: none;
-}
-
-.objective-grid td:first-child,
-.objective-grid th:first-child {
-  border-left: none;
-}
-
-.objective-grid th {
-  font-weight: 600;
-  background: var(--bg-subtle);
-}
-
 /* Auth pages */
 .auth-page {
   flex: 1;
@@ -902,9 +870,9 @@ label {
 .framework-card {
   width: 100%;
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
   text-align: left;
   padding: 14px 16px;
   border: 1px solid var(--border);
@@ -916,15 +884,14 @@ label {
 }
 
 .framework-card-label {
-  flex: 1;
-  min-width: 0;
+  width: 100%;
 }
 
 .framework-legend-badge {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  flex: none;
+  width: 100%;
   font-size: 10.5px;
   font-weight: 500;
   white-space: nowrap;
@@ -1135,6 +1102,59 @@ label {
    status pill for each Validation value. */
 .insight-table-wrap {
   overflow-x: auto;
+}
+
+/* The prose that follows a framework's table (e.g. Product Design Insight's
+   "The Bigger Product Design Insight"/Design Implications/final-structure
+   write-up) - separated from the table above it, not styled like a nested
+   Insight Panel grid. */
+.insight-trailing-markdown {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+/* All three can show a mix of a table and additional written-out prose (e.g.
+   Product Design Insight's own structure - .insight-fallback-markdown is the
+   whole-content path for a framework whose Output is entirely prose, with no
+   table at all) - a standalone bold line is the scope doc's section-title
+   convention (a literal "#" heading would truncate load_scope_reference's own
+   section extraction), and a ">" block is its callout for a key stated
+   insight - both styled here to read like real section headings/callouts
+   instead of plain paragraphs, echoing how the source reference doc itself
+   presents them. */
+.objective-preview p > strong:only-child,
+.insight-trailing-markdown p > strong:only-child,
+.insight-fallback-markdown p > strong:only-child {
+  display: block;
+  font-size: 15px;
+  margin-top: 18px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-h);
+}
+
+.objective-preview p:first-child > strong:only-child,
+.insight-trailing-markdown p:first-child > strong:only-child,
+.insight-fallback-markdown p:first-child > strong:only-child {
+  margin-top: 0;
+}
+
+.objective-preview blockquote,
+.insight-trailing-markdown blockquote,
+.insight-fallback-markdown blockquote {
+  margin: 10px 0;
+  padding: 10px 14px;
+  border-left: 3px solid var(--accent);
+  background: var(--accent-bg);
+  border-radius: 0 var(--radius) var(--radius) 0;
+  color: var(--text-h);
+}
+
+.objective-preview blockquote p,
+.insight-trailing-markdown blockquote p,
+.insight-fallback-markdown blockquote p {
+  margin: 0;
 }
 
 .insight-table {

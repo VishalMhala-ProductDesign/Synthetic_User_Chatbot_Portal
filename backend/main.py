@@ -509,8 +509,21 @@ def generate_insight(framework: str, transcript: str, persona_names: list,
     messages = build_insight_prompt(framework, transcript, persona_names,
                                      focus=focus, helps_to_identify=scope_ref.get("helps_to_identify"),
                                      output_format=scope_ref.get("output_format"), transcript_label=transcript_label)
-    response = create_completion(messages=messages, max_tokens=1800)
+    # 1800 covers every other framework's single short table comfortably, but
+    # Product Design Insight's combined output (a 7-row table, 14 per-KPI
+    # labeled blocks, plus its two write-up sections) runs far longer - and
+    # part of this same budget goes to the model's internal reasoning before
+    # any visible text, so it was hitting the cap mid-way through the KPI
+    # table and never reaching the write-up sections at the end.
+    max_tokens = 6000 if framework == "Product Design Insight" else 1800
+    response = create_completion(messages=messages, max_tokens=max_tokens)
     content = _response_text(response)
+    # Product Design Insight is the one framework whose own legitimate output
+    # discusses "Design Insight" throughout (its final structure section is
+    # literally titled that) - stripping from the first such heading would
+    # gut its real content instead of just removing an unwanted bonus section.
+    if framework == "Product Design Insight":
+        return content
     return _strip_design_insight(content)
 
 
@@ -643,12 +656,15 @@ def _insight_is_verified(model, session_id: str, db, framework: str) -> bool:
     record = db.query(model).filter_by(session_id=session_id, framework=framework).first()
     if not record or not record.content:
         return False
-    _, rows = _parse_markdown_table(record.content)
-    if not rows:
-        return False
     validated_keys = set(record.validated_rows or [])
+    # Empathy Mapping is checked off row-by-row (its own per-row Validation
+    # column), so it specifically needs rows to exist to be verifiable at all.
+    # Every other framework uses the single whole-content sentinel key, which
+    # doesn't depend on the content being a table (e.g. Product Design
+    # Insight's per-KPI write-up has no table at all).
     if framework == "Empathy Mapping":
-        return all(_row_validation_key(row) in validated_keys for row in rows)
+        _, rows = _parse_markdown_table(record.content)
+        return bool(rows) and all(_row_validation_key(row) in validated_keys for row in rows)
     return _verified_key(framework) in validated_keys
 
 
@@ -904,12 +920,7 @@ def delete_group_session(session_id: str, user_id: str = Depends(get_current_use
 # No per-researcher customization: the doc is the single source of truth.
 # ---------------------------------------------------------------------------
 
-def _markdown_table_to_grid(markdown: str) -> list:
-    headers, rows = _parse_markdown_table(markdown)
-    return [headers, *(rows or [])] if headers else []
-
-
-@app.get("/api/framework-objectives/{framework}")
+@app.get("/api/framework-objectives")
 def get_framework_objective(framework: str, user_id: str = Depends(get_current_user)):
     scope_ref = load_scope_reference(framework)
     if not scope_ref:
@@ -921,8 +932,13 @@ def get_framework_objective(framework: str, user_id: str = Depends(get_current_u
         # not a prior stage's output, so the frontend falls back to showing that.
         "input": f"Output of {prior}" if prior else None,
         "objective": scope_ref.get("objective") or "",
-        "helpsToIdentify": _markdown_table_to_grid(scope_ref.get("helps_to_identify")),
-        "outputFormat": _markdown_table_to_grid(scope_ref.get("output_format")),
+        # Sent as raw Markdown (not parsed into a table-only grid) so a section
+        # that mixes a table with prose - headings, bold lines, a numbered list
+        # (e.g. Product Design Insight's Evidence/Pattern/Design Implications) -
+        # renders in full on the frontend instead of losing everything past the
+        # first table. See MarkdownPreview in ObjectiveOutputDrawer.jsx.
+        "helpsToIdentify": scope_ref.get("helps_to_identify") or "",
+        "outputFormat": scope_ref.get("output_format") or "",
     }
 
 
