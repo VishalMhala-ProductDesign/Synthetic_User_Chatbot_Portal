@@ -14,6 +14,7 @@ The primary objective of AI Opportunity Analysis is to determine where AI can me
 | Linked Opportunity | Which improvement opportunity (from Opportunity Analysis) this builds on |
 | Potential AI Role | What AI would actually do (e.g. detect, identify, explain, recommend) |
 | Why AI Fits | Why this is a good fit for AI rather than a manual or process fix |
+| Phase Insight | What the whole Diagnose phase (Root Cause + Opportunity + AI Opportunity) reveals together, going into Define |
 
 ## Output
 | AI Opportunity | Linked Opportunity | Potential AI Role | Why AI Fits |

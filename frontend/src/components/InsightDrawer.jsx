@@ -111,17 +111,19 @@ function mergeRows(keptRows, newRows) {
 // fall back to rendering the cell as plain text.
 const EVIDENCE_LABEL_RE = /(Thinks|Feels|Says|Does):\s*/gi;
 
-// Every framework except Empathy Mapping has no per-row "Validation" column
-// of its own to check off (see hasValidationColumn) - each is instead built
-// from the previous framework's already-verified rows (see prior_framework/
-// _require_prior_insight in main.py), and gets a single whole-table
-// "researcher-verified" checkbox. That checkbox's state lives inside the same
-// validatedRows Set as real per-row keys (see rowValidationKey) so the
-// existing save/persist plumbing (onValidatedRowsChange, onSave) covers it
-// for free. It never collides with a real row's key since rowValidationKey is
-// a plain "cell cell cell" join with no such marker. JTBD Analysis and User
-// Journey Mapping keep their original literal keys for backward compatibility
-// with already-saved validated_rows; mirrors _LEGACY_VERIFIED_KEYS in main.py.
+// A framework whose content has no table at all (the pure-prose Phase
+// Insight steps) has no rows to check off individually, so it gets a single
+// whole-content "researcher-verified" checkbox instead (see useStyledTable).
+// That checkbox's state lives inside the same validatedRows Set as real
+// per-row keys (see rowValidationKey) so the existing save/persist plumbing
+// (onValidatedRowsChange, onSave) covers it for free. It never collides with
+// a real row's key since rowValidationKey is a plain "cell cell cell" join
+// with no such marker. Also doubles as a backward-compat key: every
+// table-having framework except Empathy Mapping used to rely on this same
+// whole-content checkbox before per-row validation was generalized to every
+// framework (see _insight_is_verified in main.py) - JTBD Analysis and User
+// Journey Mapping keep their original literal keys for that older saved
+// data; mirrors _LEGACY_VERIFIED_KEYS in main.py.
 const LEGACY_VERIFIED_KEYS = {
   "JTBD Analysis": "__jtbd_verified__",
   "User Journey Mapping": "__ujm_verified__",
@@ -438,16 +440,17 @@ function ValidateModal({
 // framework: consecutive rows sharing the same first-column value are merged
 // into one rowspan-ed cell (so a repeated category like an empathy quadrant
 // only prints once - a no-op for tables whose first column is unique per
-// row, which just renders like a normal table). Frameworks whose output
-// actually has a "Validation" column get two more upgrades scoped to that:
-// a colored status pill instead of plain text, and an "Evidence" column gets
-// a "Let me validate" chip that opens the source transcript - both stay off
-// for every other framework, since without a Validation rating to check,
-// "validate this row" doesn't mean anything.
+// row, which just renders like a normal table). Every framework's table gets
+// a "Validate" column appended at the end (see canValidate) - each row can be
+// individually checked off as researcher-reviewed, not just the whole table
+// at once. A table that also has a literal "Validation" column (currently
+// only Empathy Mapping) additionally gets a colored status pill there - that's
+// the model's own qualitative rating, a separate concept from the
+// researcher's own per-row validated/not-yet-validated checkmark.
 function InsightTable({ headers, rows, canValidate, validatedRows, onValidate, sourceTable, hasSource }) {
   const validationIndex = headers.findIndex((h) => h.trim().toLowerCase() === "validation");
-  const evidenceIndex = validationIndex === -1 ? -1 : headers.findIndex((h) => /evidence/i.test(h));
-  const pointIndex = validationIndex === -1 ? -1 : headers.findIndex((h) => /generated point|your statement|^statement$/i.test(h));
+  const evidenceIndex = headers.findIndex((h) => /evidence/i.test(h));
+  const pointIndex = headers.findIndex((h) => /generated point|your statement|^statement$/i.test(h));
 
   // Given a quadrant label clicked inside an "Empathy Evidence" fragment (e.g.
   // JTBD Analysis) and that fragment's own text, finds the best-matching row
@@ -493,6 +496,18 @@ function InsightTable({ headers, rows, canValidate, validatedRows, onValidate, s
     groupSpan[i] = span;
   }
 
+  // When no clear "Generated Point"/"Evidence" column exists in this table
+  // (i.e. any framework besides Empathy Mapping/JTBD Analysis), fall back to
+  // the row's first cell as the point and the whole row as the evidence text,
+  // so ValidateModal's quote/keyword matching still has real content to
+  // search the transcript with instead of coming up empty.
+  function rowEntry(row) {
+    return {
+      generatedPoint: pointIndex >= 0 ? row[pointIndex] : row[0],
+      evidence: evidenceIndex >= 0 ? row[evidenceIndex] : row.join(" · "),
+    };
+  }
+
   return (
     <table className="insight-table">
       <thead>
@@ -500,11 +515,14 @@ function InsightTable({ headers, rows, canValidate, validatedRows, onValidate, s
           {headers.map((header, i) => (
             <th key={i}>{header}</th>
           ))}
+          {canValidate && <th>Validate</th>}
         </tr>
       </thead>
       <tbody>
         {rows.map((row, rowIndex) => {
           const isGroupStart = rowIndex === 0 || row[0] !== rows[rowIndex - 1][0];
+          const rowKey = rowValidationKey(row);
+          const isValidated = validatedRows.has(rowKey);
           return (
             <tr key={rowIndex} className={isGroupStart ? "insight-row-group-start" : undefined}>
               {row.map((cell, colIndex) => {
@@ -513,19 +531,17 @@ function InsightTable({ headers, rows, canValidate, validatedRows, onValidate, s
 
                   // Empathy Mapping-style: the whole cell is a single quadrant
                   // word repeated across a group of rows - clicking it shows
-                  // every row in that group's source together.
-                  if (canValidate) {
+                  // every row in that group's source together. Only meaningful
+                  // when rows actually repeat a category across a group (a
+                  // no-op for any table whose first column is unique per row).
+                  if (canValidate && groupSpan[rowIndex] > 1) {
                     const groupRows = rows.slice(rowIndex, rowIndex + groupSpan[rowIndex]);
-                    const groupEntries = groupRows.map((r) => ({
-                      generatedPoint: pointIndex >= 0 ? r[pointIndex] : "",
-                      evidence: evidenceIndex >= 0 ? r[evidenceIndex] : "",
-                    }));
                     return (
                       <td key={colIndex} rowSpan={groupSpan[rowIndex]} className="insight-cell-category">
                         <button
                           type="button"
                           className="insight-category-source-btn"
-                          onClick={() => onValidate({ rowKey: null, category: cell, entries: groupEntries })}
+                          onClick={() => onValidate({ rowKey: null, category: cell, entries: groupRows.map(rowEntry) })}
                           title={`Take me to the source in the chat for "${cell}"`}
                         >
                           {cell}
@@ -577,33 +593,19 @@ function InsightTable({ headers, rows, canValidate, validatedRows, onValidate, s
                     </td>
                   );
                 }
-                if (colIndex === evidenceIndex) {
-                  const rowKey = rowValidationKey(row);
-                  const isValidated = validatedRows.has(rowKey);
-                  return (
-                    <td key={colIndex}>
-                      <div className="validate-evidence-cell">
-                        <span>{cell}</span>
-                        {canValidate && (
-                          <button
-                            type="button"
-                            className={`validate-chip${isValidated ? " validate-chip-done" : ""}`}
-                            onClick={() =>
-                              onValidate({
-                                rowKey,
-                                entries: [{ generatedPoint: pointIndex >= 0 ? row[pointIndex] : "", evidence: cell }],
-                              })
-                            }
-                          >
-                            {isValidated ? "✓ Validated" : "Let me validate"}
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  );
-                }
                 return <td key={colIndex}>{cell}</td>;
               })}
+              {canValidate && (
+                <td className="insight-validate-cell">
+                  <button
+                    type="button"
+                    className={`validate-chip${isValidated ? " validate-chip-done" : ""}`}
+                    onClick={() => onValidate({ rowKey, entries: [rowEntry(row)] })}
+                  >
+                    {isValidated ? "✓ Validated" : "Let me validate"}
+                  </button>
+                </td>
+              )}
             </tr>
           );
         })}
@@ -703,11 +705,11 @@ export default function InsightDrawer({
   // just frameworks with a Validation column - so every framework's output
   // has the same look and feel (e.g. JTBD Analysis matches Empathy Mapping).
   const useStyledTable = tableHeaders.length > 0 && tableRows.length > 0;
-  // The validate/remove/save workflow only makes sense for a table that
-  // actually has per-row Validation ratings to check off - scoped separately
-  // from useStyledTable so frameworks without one (e.g. JTBD Analysis) get
-  // the same visual styling without the validation-specific controls.
-  const hasValidationColumn = tableHeaders.some((h) => h.trim().toLowerCase() === "validation");
+  // Per-row "Let me validate" is available for every real table, not just
+  // ones with a Validation column - every generated claim, in every
+  // framework, gets reviewed and checked off individually rather than the
+  // whole table being signed off in one click.
+  const canValidate = useStyledTable && messages.length > 0;
   const unvalidatedCount = tableRows.filter((row) => !validatedRows.has(rowValidationKey(row))).length;
   const validatedCount = tableRows.length - unvalidatedCount;
 
@@ -736,13 +738,21 @@ export default function InsightDrawer({
   // above, plus any trailing prose after the table - e.g. Product Design
   // Insight's own write-up - left untouched by row edits) plus the
   // validated-row keys, so this exact state - not a re-parse of the original
-  // LLM output - is what's shown again on the next visit.
+  // LLM output - is what's shown again on the next visit. A framework with no
+  // table at all (e.g. Understand Insight) has nothing in tableHeaders/
+  // tableRows to reconstruct from - stringifyMarkdownTable([], []) would
+  // produce a garbage empty table and silently wipe the real generated prose,
+  // so those save the original content untouched instead (there's no
+  // row-level editing possible for them anyway, only the whole-content
+  // Verified checkbox, which validatedRows already covers).
   async function handleSave() {
     if (!onSave) return false;
     setSaveStatus("saving");
     try {
       await onSave({
-        content: [stringifyMarkdownTable(tableHeaders, tableRows), trailingMarkdown].filter(Boolean).join("\n\n"),
+        content: useStyledTable
+          ? [stringifyMarkdownTable(tableHeaders, tableRows), trailingMarkdown].filter(Boolean).join("\n\n")
+          : content,
         validatedRows: Array.from(validatedRows),
       });
       setSaveStatus("saved");
@@ -795,7 +805,7 @@ export default function InsightDrawer({
               <InsightTable
                 headers={tableHeaders}
                 rows={tableRows}
-                canValidate={hasValidationColumn && messages.length > 0}
+                canValidate={canValidate}
                 validatedRows={validatedRows}
                 onValidate={setValidating}
                 sourceTable={sourceTable}
@@ -817,7 +827,11 @@ export default function InsightDrawer({
         </div>
 
         <div className="drawer-footer">
-          {!hasValidationColumn && !!content && (
+          {/* A framework with no table at all (e.g. the Understand/Analyze/...
+              Phase Insight steps, whose Output is pure prose) has no rows to
+              check off individually, so it keeps a single whole-content
+              sign-off checkbox instead. */}
+          {!useStyledTable && !!content && (
             <label className="validate-checkbox drawer-footer-checkbox">
               <input
                 type="checkbox"
@@ -827,7 +841,12 @@ export default function InsightDrawer({
               Verified {framework}
             </label>
           )}
-          {hasValidationColumn && tableRows.length > 0 && (
+          {canValidate && tableRows.length > 0 && (
+            <span className="validate-progress" title="Rows individually reviewed and checked off">
+              {validatedCount} / {tableRows.length} rows validated
+            </span>
+          )}
+          {canValidate && tableRows.length > 0 && (
             <button
               type="button"
               className="danger"
@@ -838,7 +857,7 @@ export default function InsightDrawer({
               Remove let me validate
             </button>
           )}
-          {useStyledTable && tableRows.length > 0 && (
+          {!!content && (
             <button type="button" onClick={handleSave} disabled={saveStatus === "saving"}>
               {saveStatus === "saving" ? "Saving…" : saveStatus === "saved" ? "Saved ✓" : "Save"}
             </button>

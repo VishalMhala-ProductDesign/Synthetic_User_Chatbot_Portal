@@ -510,12 +510,14 @@ def generate_insight(framework: str, transcript: str, persona_names: list,
                                      focus=focus, helps_to_identify=scope_ref.get("helps_to_identify"),
                                      output_format=scope_ref.get("output_format"), transcript_label=transcript_label)
     # 1800 covers every other framework's single short table comfortably, but
-    # Product Design Insight's combined output (a 7-row table, 14 per-KPI
-    # labeled blocks, plus its two write-up sections) runs far longer - and
-    # part of this same budget goes to the model's internal reasoning before
-    # any visible text, so it was hitting the cap mid-way through the KPI
-    # table and never reaching the write-up sections at the end.
-    max_tokens = 6000 if framework == "Product Design Insight" else 1800
+    # a framework whose Output is several Evidence/Insight/Design-Implication
+    # write-ups per source (Product Design Insight's per-KPI blocks, Understand
+    # Insight's per-framework blocks) runs far longer - and part of this same
+    # budget goes to the model's internal reasoning before any visible text,
+    # so it was hitting the cap mid-way through and never reaching the
+    # write-up sections at the end.
+    LONG_FORM_FRAMEWORKS = {"Product Design Insight": 6000, "Understand Insight": 10000}
+    max_tokens = LONG_FORM_FRAMEWORKS.get(framework, 1800)
     response = create_completion(messages=messages, max_tokens=max_tokens)
     content = _response_text(response)
     # Product Design Insight is the one framework whose own legitimate output
@@ -649,22 +651,26 @@ def _verified_key(framework: str) -> str:
 
 def _insight_is_verified(model, session_id: str, db, framework: str) -> bool:
     """True if `framework`'s insight for this session exists and has been fully
-    researcher-verified - every row individually checked for Empathy Mapping
-    (its own per-row Validation column - see _row_validation_key), or the
-    single "Verified <framework>" checkbox for every other framework in the
-    chain (see _verified_key)."""
+    researcher-verified. Every framework whose content is a table (all of them
+    except the pure-prose Phase Insight steps) requires every row individually
+    checked off (see _row_validation_key/InsightDrawer.jsx's per-row "Let me
+    validate") - not just Empathy Mapping any more, since per-row validation
+    was generalized to every framework's table. A framework with no table at
+    all falls back to the single whole-content "Verified <framework>" sentinel
+    key (see _verified_key), since there are no individual rows to check off.
+    Also accepts that same whole-content key for a table-having framework as a
+    backward-compat fallback, so a session verified before per-row validation
+    was generalized (when every framework but Empathy Mapping only ever wrote
+    that sentinel key) doesn't retroactively look unverified."""
     record = db.query(model).filter_by(session_id=session_id, framework=framework).first()
     if not record or not record.content:
         return False
     validated_keys = set(record.validated_rows or [])
-    # Empathy Mapping is checked off row-by-row (its own per-row Validation
-    # column), so it specifically needs rows to exist to be verifiable at all.
-    # Every other framework uses the single whole-content sentinel key, which
-    # doesn't depend on the content being a table (e.g. Product Design
-    # Insight's per-KPI write-up has no table at all).
-    if framework == "Empathy Mapping":
-        _, rows = _parse_markdown_table(record.content)
-        return bool(rows) and all(_row_validation_key(row) in validated_keys for row in rows)
+    _, rows = _parse_markdown_table(record.content)
+    if rows:
+        return all(_row_validation_key(row) in validated_keys for row in rows) or (
+            _verified_key(framework) in validated_keys
+        )
     return _verified_key(framework) in validated_keys
 
 
@@ -928,9 +934,15 @@ def get_framework_objective(framework: str, user_id: str = Depends(get_current_u
     prior = prior_framework(framework)
     return {
         "framework": framework,
-        # None for Empathy Mapping - its real input is this chat's own transcript,
-        # not a prior stage's output, so the frontend falls back to showing that.
-        "input": f"Output of {prior}" if prior else None,
+        # Prefers the scope doc's own documented Input (see _extract_input_text
+        # in prompts.py) - a synthesis step like Understand Insight lists every
+        # framework in its phase there, not just the single immediately-prior
+        # one the generation chain actually reads from. Falls back to the
+        # computed single-hop value only if a doc doesn't define its own; None
+        # for Empathy Mapping either way - its real input is this chat's own
+        # transcript, not a prior stage's output, so the frontend falls back
+        # to showing that.
+        "input": scope_ref.get("input") or (f"Output of {prior}" if prior else None),
         "objective": scope_ref.get("objective") or "",
         # Sent as raw Markdown (not parsed into a table-only grid) so a section
         # that mixes a table with prose - headings, bold lines, a numbered list

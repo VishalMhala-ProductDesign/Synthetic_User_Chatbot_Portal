@@ -16,6 +16,7 @@ The primary objective of System Mapping is to understand the broader ecosystem s
 | People | Who interacts with or relies on this system |
 | Data | What data flows through it |
 | Notes | Anything else relevant about how it fits the ecosystem |
+| Phase Insight | What the whole Analyze phase (Task Flow + Workflow + Decision + Pain/Friction + System) reveals together, going into Diagnose |
 
 ## Output
 | System/Tool | Role | Connects To | Notes |

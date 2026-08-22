@@ -2,7 +2,7 @@
 ## Task Flow Analysis Input
 | Task Flow Analysis | Input to Task Flow Analysis |
 |----|----|
-| Task Flow Analysis | Output of User Journey Mapping |
+| Task Flow Analysis | Output of Understand Insight |
 
 ## Objective
 The primary objective of Task Flow Analysis is to understand exactly how a user completes a specific task by identifing Break down the steps, Identify decision points, Find friction, Identify unnecessary steps, Identify dependencies, Find errors/failure points, Identify optimization opportunitie.                       

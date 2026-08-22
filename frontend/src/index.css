@@ -10,6 +10,8 @@
   --accent-border: rgba(170, 59, 255, 0.5);
   --danger: #d1305c;
   --danger-bg: rgba(209, 48, 92, 0.1);
+  --insight-accent: #0d9488;
+  --insight-accent-bg: rgba(13, 148, 136, 0.09);
   --shadow:
     rgba(0, 0, 0, 0.1) 0 10px 15px -3px, rgba(0, 0, 0, 0.05) 0 4px 6px -2px;
   --shadow-sm: rgba(0, 0, 0, 0.06) 0 1px 3px, rgba(0, 0, 0, 0.04) 0 1px 2px;
@@ -41,6 +43,8 @@
     --accent-border: rgba(192, 132, 252, 0.5);
     --danger: #f27093;
     --danger-bg: rgba(242, 112, 147, 0.12);
+    --insight-accent: #2dd4bf;
+    --insight-accent-bg: rgba(45, 212, 191, 0.14);
     --shadow:
       rgba(0, 0, 0, 0.4) 0 10px 15px -3px, rgba(0, 0, 0, 0.25) 0 4px 6px -2px;
   }
@@ -357,7 +361,12 @@ label {
 
 /* Insight Panel diagrams need more room than a form drawer to stay legible. */
 .drawer-panel-wide {
-  width: 720px;
+  /* Wide enough that a framework's full table (up to 9 columns once the
+     Validate column is included, e.g. User Journey Mapping) fits without
+     horizontal scrolling on a typical desktop window, while never exceeding
+     92% of the viewport so a sliver of the dimmed backdrop stays visible as
+     an overlay affordance instead of going edge-to-edge. */
+  width: min(1200px, 92vw);
 }
 
 .drawer-header {
@@ -397,9 +406,18 @@ label {
 .drawer-footer {
   flex: 0 0 auto;
   display: flex;
+  align-items: center;
   gap: 8px;
   padding: 16px 20px;
   border-top: 1px solid var(--border);
+}
+
+.validate-progress {
+  margin-right: auto;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text);
+  opacity: 0.75;
 }
 
 .close-confirm-overlay {
@@ -870,9 +888,9 @@ label {
 .framework-card {
   width: 100%;
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 6px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
   text-align: left;
   padding: 14px 16px;
   border: 1px solid var(--border);
@@ -884,14 +902,15 @@ label {
 }
 
 .framework-card-label {
-  width: 100%;
+  flex: 1;
+  min-width: 0;
 }
 
 .framework-legend-badge {
   display: inline-flex;
   align-items: center;
+  flex: none;
   gap: 5px;
-  width: 100%;
   font-size: 10.5px;
   font-weight: 500;
   white-space: nowrap;
@@ -931,6 +950,44 @@ label {
   border-color: var(--accent);
   background: var(--accent-bg);
   color: var(--accent);
+}
+
+/* The 7 synthesis-step frameworks (Understand Insight, ..., Product Design
+   Insight - see isInsightFramework) get their own look so they read as
+   milestone checkpoints rather than just another analysis card. A teal accent
+   was picked deliberately distinct from every color already meaningful
+   elsewhere on this card - the brand purple (selection), and the status-dot
+   palette (green/amber/blue/gray) - so this reads as "type of card", never as
+   a status. box-shadow (not border) for the stripe so it composes with
+   .framework-card-active's own border-color change instead of fighting it for
+   the same property when a card is both an Insight card and selected. */
+.framework-card-insight {
+  box-shadow: inset 3px 0 0 0 var(--insight-accent);
+  background: linear-gradient(90deg, var(--insight-accent-bg), transparent 65%);
+}
+
+.framework-card-insight .framework-card-label {
+  font-weight: 700;
+}
+
+.framework-phase-group {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.framework-phase-header {
+  margin: 4px 0 0;
+  padding: 0 2px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.framework-phase-group:first-child .framework-phase-header {
+  margin-top: 0;
 }
 
 .framework-item {
@@ -1275,11 +1332,12 @@ label {
 
 /* "Let me validate" chip on an Evidence cell, and the modal it opens showing
    the source chat transcript with the claim's quoted phrases highlighted. */
-.validate-evidence-cell {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 8px;
+/* The "Validate" column appended to every framework's table (not just ones
+   with a literal "Validation" column) - one chip per row, right-aligned so it
+   reads as an action column rather than a data column. */
+.insight-validate-cell {
+  text-align: right;
+  white-space: nowrap;
 }
 
 .validate-chip {

@@ -2,7 +2,7 @@
 ## Validation & Usability Analysis Input
 | Validation & Usability Analysis | Input to Validation & Usability Analysis |
 |--|--|
-| Validation & Usability Analysis | Output of Trust & Control Analysis |
+| Validation & Usability Analysis | Output of Design Insight |
 
 ## Objective
 The primary objective of Validation & Usability Analysis is to test whether the proposed human–AI solution actually works for users — whether they can complete the task, understand the AI, calibrate their trust correctly, and stay in control.

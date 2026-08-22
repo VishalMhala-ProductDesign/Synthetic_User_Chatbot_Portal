@@ -6,29 +6,7 @@ import { api } from "../api";
 import { useAuth } from "../auth/AuthContext";
 import InsightDrawer from "../components/InsightDrawer";
 import ObjectiveOutputDrawer from "../components/ObjectiveOutputDrawer";
-
-const ANALYSIS_FRAMEWORKS = [
-  "Empathy Mapping",
-  "JTBD Analysis",
-  "User Journey Mapping",
-  "Task Flow Analysis",
-  "Workflow Analysis",
-  "Decision Analysis",
-  "Pain Point + Friction Analysis",
-  "System Mapping",
-  "Root Cause Analysis",
-  "Opportunity Analysis",
-  "AI Opportunity Analysis",
-  "Human–AI Workflow Analysis",
-  "AI Capability Analysis",
-  "Agent / AI Skill Analysis",
-  "Future-State Workflow",
-  "Human–AI Interaction Design",
-  "Trust & Control Analysis",
-  "Validation & Usability Analysis",
-  "Outcome / KPI Analysis",
-  "Product Design Insight",
-];
+import { FRAMEWORK_PHASES, frameworkStatusLabel, frameworkStatusClass, isInsightFramework } from "../lib/frameworks";
 
 // Maps a "Grounded in" label (as the model names it, per prompts.py's system
 // prompt) back to the actual persona field value, so researchers can verify
@@ -51,26 +29,6 @@ function resolveGroundedField(persona, label) {
     default:
       return persona.custom_attributes?.[label];
   }
-}
-
-// Status legend shown inside each framework's Insight button - computed
-// entirely from get_group_session_insight_status's response (see
-// frameworkStatus), so it always agrees with whether the button is actually
-// clickable.
-function frameworkStatusLabel(status) {
-  if (status?.generated && status.verified) return "Insight Generated & Verified";
-  if (status?.generated) return "Insight Generated & Not Verified";
-  if (status?.unlocked) return "Ready to generate";
-  return "Not ready to generate";
-}
-
-// Color-codes the same status frameworkStatusLabel describes, for the dot
-// shown next to it.
-function frameworkStatusClass(status) {
-  if (status?.generated && status.verified) return "legend-verified";
-  if (status?.generated) return "legend-unverified";
-  if (status?.unlocked) return "legend-ready";
-  return "legend-locked";
 }
 
 export default function GroupChatPage() {
@@ -456,31 +414,36 @@ export default function GroupChatPage() {
               )}
             </p>
             <div className="chat-analysis-body">
-              {ANALYSIS_FRAMEWORKS.map((framework) => (
-                <div key={framework} className="framework-item">
-                  <div className="framework-row">
-                    <button
-                      type="button"
-                      className={`framework-card${selectedFramework === framework ? " framework-card-active" : ""}`}
-                      onClick={() => handleFrameworkClick(framework)}
-                      disabled={!activeSession || !frameworkStatus[framework]?.unlocked}
-                      title={frameworkStatus[framework]?.reason || undefined}
-                    >
-                      <span className="framework-card-label">{framework}</span>
-                      <span className={`framework-legend-badge ${frameworkStatusClass(frameworkStatus[framework])}`}>
-                        <span className="framework-legend-dot" />
-                        {frameworkStatusLabel(frameworkStatus[framework])}
-                      </span>
-                    </button>
-                    <button
-                      type="button"
-                      className="objective-output-button"
-                      onClick={() => setObjectiveFramework(framework)}
-                      title="Objective & Output"
-                    >
-                      O&amp;O
-                    </button>
-                  </div>
+              {FRAMEWORK_PHASES.map(({ phase, frameworks }) => (
+                <div key={phase} className="framework-phase-group">
+                  <p className="framework-phase-header">{phase}</p>
+                  {frameworks.map((framework) => (
+                    <div key={framework} className="framework-item">
+                      <div className="framework-row">
+                        <button
+                          type="button"
+                          className={`framework-card${selectedFramework === framework ? " framework-card-active" : ""}${isInsightFramework(framework) ? " framework-card-insight" : ""}`}
+                          onClick={() => handleFrameworkClick(framework)}
+                          disabled={!activeSession || !frameworkStatus[framework]?.unlocked}
+                          title={frameworkStatus[framework]?.reason || undefined}
+                        >
+                          <span className="framework-card-label">{framework}</span>
+                          <span className={`framework-legend-badge ${frameworkStatusClass(frameworkStatus[framework])}`}>
+                            <span className="framework-legend-dot" />
+                            {frameworkStatusLabel(frameworkStatus[framework])}
+                          </span>
+                        </button>
+                        <button
+                          type="button"
+                          className="objective-output-button"
+                          onClick={() => setObjectiveFramework(framework)}
+                          title="Objective & Output"
+                        >
+                          O&amp;O
+                        </button>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               ))}
             </div>

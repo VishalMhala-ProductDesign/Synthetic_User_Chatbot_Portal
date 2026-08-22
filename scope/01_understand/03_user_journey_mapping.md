@@ -2,7 +2,7 @@
 ## User Journey Mapping Input
 | User Journey Mapping | Input to Journey Mapping |
 |--|--|
-| User Journey Mapping | Output of JTBD analysis |
+| User Journey Mapping | Output of JTBD Analysis |
 
 ## Objective
 The primary objective of Journey Mapping is to understand the user's complete experience across a process by identifing User goals, Activities/Actions, Thinks, Feels, Pain Points/Friction, Decision points, and opportunities.
@@ -17,6 +17,7 @@ The primary objective of Journey Mapping is to understand the user's complete ex
 | Pain Points/Friction | Where users struggle, get confused, wait, or abandon |
 | Decision points | Where users make important choices |
 | Opportunities | Where UX, automation, AI, or process changes can help |
+| Phase Insight | What the whole Understand phase (Empathy + JTBD + Journey) reveals together, going into Analyze |
 
 ## Output
 | Journey Stage | User Goal | Activities/Actions | Thinks | Feels | Pain Points/Friction | Decision Point | Opportunities |
@@ -28,4 +29,5 @@ The primary objective of Journey Mapping is to understand the user's complete ex
 | Stage-05 | AI identifing user goal | AI identifing Activities/Actions | AI identifing Thinks | AI identifing Feels | AI identifing Pain Points/Friction | AI identifing Decision Point | AI identifing Opportunities |
 | Stage-06 | AI identifing user goal | AI identifing Activities/Actions | AI identifing Thinks | AI identifing Feels | AI identifing Pain Points/Friction | AI identifing Decision Point | AI identifing Opportunities |
 | Stage as needed | AI identifing user goal | AI identifing Activities/Actions | AI identifing Thinks | AI identifing Feels | AI identifing Pain Points/Friction | AI identifing Decision Point | AI identifing Opportunities |
+
 

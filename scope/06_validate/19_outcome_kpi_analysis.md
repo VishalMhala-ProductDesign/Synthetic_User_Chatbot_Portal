@@ -13,6 +13,7 @@ The primary objective of Outcome / KPI Analysis is to measure whether the redesi
 | KPI | What metric is being measured |
 | Before | What the metric was before the redesign |
 | Target | What the metric is expected to reach after the redesign |
+| Phase Insight | What the whole Validate phase (Validation & Usability + Outcome/KPI) reveals together, going into Product Design Insight |
 
 ## Output
 | KPI | Before | Target |

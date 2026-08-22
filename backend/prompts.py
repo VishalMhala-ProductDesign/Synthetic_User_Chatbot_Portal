@@ -49,35 +49,49 @@ def split_reply_and_grounding(raw_text: str):
     return raw_text.strip(), []
 
 
-# scope/00_overview.md through scope/20_product_design_insight.md is the
-# researcher's own reference doc for the full 20-stage framework - the single
-# source of truth for what each framework's Objective/Helps to Identify/Output
-# should be. Read live from disk (see load_scope_reference) rather than copied
-# into this file, so the read-only "Objective & Output" overlay and the
-# generation prompt below can never drift out of sync with the doc again.
+# scope/00_overview.md through scope/07_product_design_insight/20_product_design_insight.md
+# is the researcher's own reference doc for the full framework - the single
+# source of truth for what each framework's Objective/Helps to
+# Identify/Output should be. Read live from disk (see load_scope_reference)
+# rather than copied into this file, so the read-only "Objective & Output"
+# overlay and the generation prompt below can never drift out of sync with the
+# doc again. Files live in phase subfolders (01_understand/, 02_analyze/, ...)
+# mirroring 00_overview.md's "Overall Flow" grouping - see that file for which
+# phase each framework belongs to. Each phase folder's last entry is that
+# phase's own "<phase> Insight" - a synthesis framework (e.g. "Understand
+# Insight") sitting between that phase's last analysis and the next phase's
+# first, so the phase-level synthesis is itself a real, generated, verifiable
+# link in the chain - not just a side note - and the next phase is built on
+# top of it rather than skipping straight past it.
 SCOPE_DIR = Path(__file__).resolve().parent.parent / "scope"
 
 FRAMEWORK_SCOPE_FILES = {
-    "Empathy Mapping": "01_empathy_mapping.md",
-    "JTBD Analysis": "02_jtbd_analysis.md",
-    "User Journey Mapping": "03_user_journey_mapping.md",
-    "Task Flow Analysis": "04_task_flow_analysis.md",
-    "Workflow Analysis": "05_workflow_analysis.md",
-    "Decision Analysis": "06_decision_analysis.md",
-    "Pain Point + Friction Analysis": "07_pain_point_friction_analysis.md",
-    "System Mapping": "08_system_mapping.md",
-    "Root Cause Analysis": "09_root_cause_analysis.md",
-    "Opportunity Analysis": "10_opportunity_analysis.md",
-    "AI Opportunity Analysis": "11_ai_opportunity_analysis.md",
-    "Human–AI Workflow Analysis": "12_human_ai_workflow_analysis.md",
-    "AI Capability Analysis": "13_ai_capability_analysis.md",
-    "Agent / AI Skill Analysis": "14_agent_ai_skill_analysis.md",
-    "Future-State Workflow": "15_future_state_workflow.md",
-    "Human–AI Interaction Design": "16_human_ai_interaction_design.md",
-    "Trust & Control Analysis": "17_trust_control_analysis.md",
-    "Validation & Usability Analysis": "18_validation_usability_analysis.md",
-    "Outcome / KPI Analysis": "19_outcome_kpi_analysis.md",
-    "Product Design Insight": "20_product_design_insight.md",
+    "Empathy Mapping": "01_understand/01_empathy_mapping.md",
+    "JTBD Analysis": "01_understand/02_jtbd_analysis.md",
+    "User Journey Mapping": "01_understand/03_user_journey_mapping.md",
+    "Understand Insight": "01_understand/understand_Insight.md",
+    "Task Flow Analysis": "02_analyze/04_task_flow_analysis.md",
+    "Workflow Analysis": "02_analyze/05_workflow_analysis.md",
+    "Decision Analysis": "02_analyze/06_decision_analysis.md",
+    "Pain Point + Friction Analysis": "02_analyze/07_pain_point_friction_analysis.md",
+    "System Mapping": "02_analyze/08_system_mapping.md",
+    "Analyze Insight": "02_analyze/analyze_Insight.md",
+    "Root Cause Analysis": "03_diagnose/09_root_cause_analysis.md",
+    "Opportunity Analysis": "03_diagnose/10_opportunity_analysis.md",
+    "AI Opportunity Analysis": "03_diagnose/11_ai_opportunity_analysis.md",
+    "Diagnose Insight": "03_diagnose/diagnose_Insight.md",
+    "Human–AI Workflow Analysis": "04_define/12_human_ai_workflow_analysis.md",
+    "AI Capability Analysis": "04_define/13_ai_capability_analysis.md",
+    "Agent / AI Skill Analysis": "04_define/14_agent_ai_skill_analysis.md",
+    "Define Insight": "04_define/define_Insight.md",
+    "Future-State Workflow": "05_design/15_future_state_workflow.md",
+    "Human–AI Interaction Design": "05_design/16_human_ai_interaction_design.md",
+    "Trust & Control Analysis": "05_design/17_trust_control_analysis.md",
+    "Design Insight": "05_design/design_Insight.md",
+    "Validation & Usability Analysis": "06_validate/18_validation_usability_analysis.md",
+    "Outcome / KPI Analysis": "06_validate/19_outcome_kpi_analysis.md",
+    "Validate Insight": "06_validate/validate_Insight.md",
+    "Product Design Insight": "07_product_design_insight/20_product_design_insight.md",
 }
 
 
@@ -108,12 +122,32 @@ def _extract_scope_section(markdown: str, heading: str) -> str:
     return match.group(1).strip() if match else None
 
 
+def _extract_input_text(markdown: str, framework: str) -> str:
+    """Reads this framework's own "## <Framework> Input" table (its second
+    row's second column, e.g. "Output of Empathy Mapping, JTBD Analysis, and
+    User Journey Mapping") and returns that documented value verbatim. A
+    synthesis step like Understand Insight can - and should - list every
+    framework in its phase here, not just the single immediately-prior one
+    that prior_framework()/the generation chain actually reads from, since
+    this is what the researcher-facing "Objective & Output" overlay shows as
+    this framework's Input."""
+    section = _extract_scope_section(markdown, f"{framework} Input")
+    if not section:
+        return None
+    lines = [line for line in section.split("\n") if line.strip().startswith("|")]
+    if len(lines) < 2:
+        return None
+    last_cell = lines[-1].strip().strip("|").rsplit("|", 1)[-1].strip()
+    return last_cell or None
+
+
 def load_scope_reference(framework: str) -> dict:
     """Reads this framework's scope/<NN>_....md reference doc and returns its
-    Objective, Helps to Identify, and Output sections - the same three pieces
-    the read-only "Objective & Output" overlay displays, and the ones
-    build_insight_prompt studies/reproduces when generating. Returns None for
-    a framework with no scope doc."""
+    Input, Objective, Helps to Identify, and Output sections - the same
+    pieces the read-only "Objective & Output" overlay displays. Input and
+    Objective/Helps to Identify/Output are the ones build_insight_prompt
+    studies/reproduces when generating. Returns None for a framework with no
+    scope doc."""
     filename = FRAMEWORK_SCOPE_FILES.get(framework)
     if not filename:
         return None
@@ -122,6 +156,7 @@ def load_scope_reference(framework: str) -> dict:
     except FileNotFoundError:
         return None
     return {
+        "input": _extract_input_text(markdown, framework),
         "objective": _extract_scope_section(markdown, "Objective"),
         "helps_to_identify": _extract_scope_section(markdown, "Helps to Identify"),
         "output_format": _extract_scope_section(markdown, "Output"),
@@ -351,10 +386,15 @@ and what you emphasize - this is content guidance, not a layout to reproduce.
         # deprioritize in favor of the more detailed default instructions.
         format_instructions = f"""{study_instructions}Once you've studied that, generate the {framework} insight and put it into the
 researcher's exact output format below - reproduce that same arrangement using
-Markdown (a table, headed sections, etc. - whichever best reproduces what's shown),
-including every part of it (e.g. a table followed by additional written-out
-sections), rather than substituting a generic table of your own or dropping
-anything past the first table. Output ONLY that content - nothing before it,
+Markdown, including every part of it (e.g. a table followed by additional
+written-out sections), rather than substituting a generic table of your own or
+dropping anything past the first table. Match the exact Markdown element type
+used for each part - a bold-labeled paragraph stays a bold-labeled paragraph, a
+bullet list stays a bullet list, a table stays a table - never convert one of
+these into another even if you judge it clearer or more compact; several
+parallel bold-labeled paragraphs are not "the same as" a table and must not be
+merged into one, since a real table there changes how the researcher can
+review and validate this output. Output ONLY that content - nothing before it,
 nothing after it, no extra commentary of your own. This is the primary
 instruction for how to structure the output.
 

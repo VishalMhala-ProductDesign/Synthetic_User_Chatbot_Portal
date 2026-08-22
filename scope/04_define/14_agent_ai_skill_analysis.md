@@ -14,6 +14,7 @@ The primary objective of Agent / AI Skill Analysis is to translate each AI capab
 | Description | What this skill actually involves |
 | Tool(s) Needed | What API, system, or data source the skill depends on |
 | Linked Capability | Which capability (from AI Capability Analysis) this skill supports |
+| Phase Insight | What the whole Define phase (Human–AI Workflow + AI Capability + Agent/AI Skill) reveals together, going into Design |
 
 ## Output
 | Skill/Action | Description | Tool(s) Needed | Linked Capability |

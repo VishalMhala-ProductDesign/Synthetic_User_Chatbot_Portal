@@ -2,7 +2,7 @@
 ## Product Design Insight Input
 | Product Design Insight | Input to Product Design Insight |
 |--|--|
-| Product Design Insight | Output of Outcome / KPI Analysis |
+| Product Design Insight | Output of Validate Insight |
 
 ## Objective
 The primary objective of Product Design Insight is to interpret what the Outcome / KPI results actually reveal about the product design — not to simply repeat the KPI, but to translate each outcome into a design insight, surface the pattern across all KPIs, and convert that pattern into concrete design implications.

@@ -2,7 +2,7 @@
 ## Future-State Workflow Input
 | Future-State Workflow | Input to Future-State Workflow |
 |--|--|
-| Future-State Workflow | Output of Agent / AI Skill Analysis |
+| Future-State Workflow | Output of Define Insight |
 
 ## Objective
 The primary objective of Future-State Workflow is to redesign the original workflow using the agreed AI skills and human–AI responsibilities, showing what the improved, end-to-end workflow should look like.

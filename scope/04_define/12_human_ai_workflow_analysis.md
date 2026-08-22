@@ -2,7 +2,7 @@
 ## Human–AI Workflow Analysis Input
 | Human–AI Workflow Analysis | Input to Human–AI Workflow Analysis |
 |--|--|
-| Human–AI Workflow Analysis | Output of AI Opportunity Analysis |
+| Human–AI Workflow Analysis | Output of Diagnose Insight |
 
 ## Objective
 The primary objective of Human–AI Workflow Analysis is to define how humans and AI should collaborate — what AI does, what the human does, and how the work hands off between them.

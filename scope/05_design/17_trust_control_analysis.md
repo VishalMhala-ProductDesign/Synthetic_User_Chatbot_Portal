@@ -14,6 +14,7 @@ The primary objective of Trust & Control Analysis is to ensure the user can unde
 | Transparency Shown | Why AI flagged/acted, what data it used, how confident it is |
 | User Controls Available | Whether the user can review the evidence, reject the recommendation, or undo the action |
 | Handback Trigger | When AI must hand control back to the human |
+| Phase Insight | What the whole Design phase (Future-State Workflow + Human–AI Interaction Design + Trust & Control) reveals together, going into Validate |
 
 ## Output
 | Interaction Point | Transparency Shown | User Controls Available | Handback Trigger |
